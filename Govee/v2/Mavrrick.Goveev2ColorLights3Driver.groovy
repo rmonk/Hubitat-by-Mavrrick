@@ -40,6 +40,13 @@ metadata {
         attribute "cloudAPI", "string"
         attribute "effectNum", "integer" 
         attribute "goveeBrightness", "integer"
+        attribute "sceneCatalog", "string"
+        command "setEffect", [
+            [name: "effect", type: "STRING", description: "Scene Number or Name (e.g. 10745 or Forest)"]
+           ]
+        command "setEffectByName", [
+            [name: "sceneName", type: "STRING", description: "Scene or DIY Name to activate (e.g. Forest, Sunset)"]
+           ]
         command "activateDIY", [
             [name: "diyNumber", type: "NUMBER", description: "DIY Number to activate"]
            ]
@@ -88,7 +95,21 @@ metadata {
             input(name: "debugLog", type: "bool", title: "Debug Logging", defaultValue: false)
             input("descLog", "bool", title: "Enable descriptionText logging", required: true, defaultValue: true) 
 		}
-		
+		section("Scene Selection") {
+            def sceneOptions = [:]
+            state.scenes?.each { k, v ->
+                def sName = (v instanceof Map) ? v.name : v
+                sceneOptions[k.toString()] = "${sName} (ID: ${k})"
+            }
+            state.diyScene?.each { k, v ->
+                def sName = (v instanceof Map) ? v.name : v
+                sceneOptions[k.toString()] = "[DIY] ${sName} (ID: ${k})"
+            }
+            if (sceneOptions) {
+                input(name: "prefSelectedScene", type: "enum", title: "Select Scene from Dropdown", options: sceneOptions)
+                input(name: "prefActivateScene", type: "bool", title: "Activate selected scene on Save Preferences", defaultValue: false)
+            }
+		}
 	}
 }
 
@@ -115,6 +136,11 @@ def refresh() {
 def updated() {
     initialize() 
     sceneLoad()    
+    if (settings.prefActivateScene && settings.prefSelectedScene) {
+        if (debugLog) {log.debug "updated(): Activating selected scene from preferences: ${settings.prefSelectedScene}"}
+        setEffect(settings.prefSelectedScene)
+        device.updateSetting("prefActivateScene", [value: "false", type: "bool"])
+    }
 }
 
 def initialize(){
@@ -265,6 +291,11 @@ def  setEffect(effectNo) {
     } else { 
         cloudSetEffect (effectNo)
     }
+}
+
+def setEffectByName(sceneName) {
+    if (debugLog) {log.debug "setEffectByName(): Setting effect by name '${sceneName}'"}
+    setEffect(sceneName)
 }
 
 def setNextEffect() {

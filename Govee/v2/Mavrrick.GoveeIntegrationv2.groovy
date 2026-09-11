@@ -122,6 +122,7 @@ preferences
     page(name: 'sceneManualUpdate', title: 'Update Scene data') 
     page(name: 'sceneManualUpdate2', title: 'Update Scene data') 
     page(name: 'sceneGoveeExtract', title: 'Update Scene data')
+    page(name: 'sceneController', title: 'Device Scene Controller')
     page(name: 'about', title: 'About')
 }
 
@@ -199,6 +200,9 @@ def mainPage() {
             input 'apiV2threshold', 'number', title: 'Daily Rate Limit threshold to send out notification for Appliances.', required: false , range: '1..100', defaultValue: 3
         }
         } */
+        section('<b>Govee Device Scene Control</b>') {
+            href 'sceneController', title: 'Device Scene Controller', description: 'Interactive drop-down interface to view and activate scenes on your Govee devices.'
+        }
         section('<b>Govee LAN API Scene Management</b>') {
             href 'sceneManagement', title: 'Lan API Scene Management Menu', description: 'Click to setup extraction credential, extract scenes, and manage device association.'
         }
@@ -381,6 +385,101 @@ def deviceLanManual2() {
             section('<b>Device Manual Add</b>') {
             paragraph "Please try again and fill in all needed values."
             }    
+        }
+    }
+}
+
+private def getAllGoveeChildDevices() {
+    def devList = []
+    try {
+        devList.addAll(getChildDevices() ?: [])
+        def mgr = getChildDevice('Govee_v2_Device_Manager')
+        if (mgr) {
+            devList.addAll(mgr.getChildDevices() ?: [])
+        }
+    } catch (Exception e) {
+        logger("getAllGoveeChildDevices() error: ${e}", 'warn')
+    }
+    return devList.unique { it.deviceNetworkId }
+}
+
+private def findGoveeDevice(String dni) {
+    if (!dni) return null
+    def allDevs = getAllGoveeChildDevices()
+    return allDevs.find { it.deviceNetworkId == dni }
+}
+
+def sceneController() {
+    dynamicPage(name: 'sceneController', title: 'Govee Device Scene Controller', uninstall: false, install: false, submitOnChange: true, nextPage: "mainPage") {
+        section('<b>Select Device to Control</b>') {
+            def devOptions = [:]
+            getAllGoveeChildDevices().each { dev ->
+                if (dev.hasCapability("LightEffects") || dev.currentValue("lightEffects")) {
+                    devOptions[dev.deviceNetworkId] = dev.displayName ?: dev.label ?: dev.name
+                }
+            }
+            if (devOptions) {
+                input 'ctrlDeviceDNI', 'enum', title: 'Select Govee Light Device', options: devOptions, required: true, submitOnChange: true
+            } else {
+                paragraph "No light devices with LightEffects capability found."
+            }
+        }
+        if (settings.ctrlDeviceDNI) {
+            def dev = findGoveeDevice(settings.ctrlDeviceDNI)
+            if (dev) {
+                section('<b>Device Status</b>') {
+                    def sw = dev.currentValue('switch') ?: 'unknown'
+                    def lvl = dev.currentValue('level')
+                    def eff = dev.currentValue('effectName') ?: 'None'
+                    def effNum = dev.currentValue('effectNum') ?: 'None'
+                    paragraph "<b>Power:</b> ${sw.toUpperCase()} | <b>Level:</b> ${lvl != null ? lvl + '%' : 'N/A'} | <b>Active Scene:</b> ${eff} (ID: ${effNum})"
+                }
+
+                section('<b>Scene Selection</b>') {
+                    def leJson = dev.currentValue("lightEffects")
+                    def sceneOptions = [:]
+                    if (leJson) {
+                        try {
+                            def jsonSlurper = new JsonSlurper()
+                            def parsed = jsonSlurper.parseText(leJson)
+                            parsed.sort { it.value?.toString()?.toLowerCase() }.each { k, v ->
+                                sceneOptions[k.toString()] = "${v} (ID: ${k})"
+                            }
+                        } catch (Exception e) {
+                            paragraph "Error reading scenes: ${e.message}"
+                        }
+                    }
+                    if (sceneOptions) {
+                        input 'ctrlSelectedScene', 'enum', title: 'Choose Scene from Drop-down', options: sceneOptions, required: true, submitOnChange: true
+                        input 'btnActivateScene', 'button', title: 'Activate Selected Scene'
+                        if (state.lastActivatedScene && (now() - (state.lastActivatedTime ?: 0)) < 30000) {
+                            paragraph "<mark style='background:#d4edda; color:#155724; padding:4px;'>Command sent: Activated scene '${state.lastActivatedSceneName ?: state.lastActivatedScene}'!</mark>"
+                        }
+                    } else {
+                        paragraph "No scenes currently cached on device. Please click 'Scene Load' on the device details page or ensure the device is connected."
+                    }
+                }
+
+                section('<b>Available Scenes Catalog</b>') {
+                    def leJson = dev.currentValue("lightEffects")
+                    if (leJson) {
+                        try {
+                            def jsonSlurper = new JsonSlurper()
+                            def parsed = jsonSlurper.parseText(leJson)
+                            def html = "<div style='max-height:220px; overflow-y:auto; border:1px solid #ddd; padding:4px;'>"
+                            html += "<table style='width:100%; border-collapse:collapse; font-size:12px; text-align:left;'>"
+                            html += "<tr style='border-bottom:1px solid #888; background:#f4f4f4;'><th>ID</th><th>Scene Name</th></tr>"
+                            parsed.sort { it.value?.toString()?.toLowerCase() }.each { k, v ->
+                                html += "<tr style='border-bottom:1px solid #eee;'><td><code>${k}</code></td><td><b>${v}</b></td></tr>"
+                            }
+                            html += "</table></div>"
+                            paragraph html
+                        } catch (Exception e) {
+                            // ignore
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1487,8 +1586,25 @@ private def appButtonHandler(button) {
             goveeScene.clear()
             goveeSceneRetrieve(it)
         }
+    } else if (button == "btnActivateScene") {
+        if (settings.ctrlDeviceDNI && settings.ctrlSelectedScene) {
+            def dev = findGoveeDevice(settings.ctrlDeviceDNI)
+            if (dev) {
+                logger("appButtonHandler(): Activating scene ${settings.ctrlSelectedScene} on device ${dev.displayName}", 'info')
+                dev.setEffect(settings.ctrlSelectedScene)
+                state.lastActivatedScene = settings.ctrlSelectedScene
+                def leJson = dev.currentValue("lightEffects")
+                if (leJson) {
+                    try {
+                        def jsonSlurper = new JsonSlurper()
+                        def parsed = jsonSlurper.parseText(leJson)
+                        state.lastActivatedSceneName = parsed[settings.ctrlSelectedScene] ?: settings.ctrlSelectedScene
+                    } catch (Exception e) {}
+                }
+                state.lastActivatedTime = now()
+            }
+        }
     }
-    
 }
 
 def apiRateLimits(type, value) {

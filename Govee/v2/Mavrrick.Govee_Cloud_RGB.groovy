@@ -91,17 +91,66 @@ def gradient(on_off) {
 }
 
 def cloudSetEffect (effectNo) {
-    if (debugLog) {log.debug ("setEffect(): Setting effect via cloud api to scene number  ${effectNo}") }
-    effectNumber = effectNo.toString()
-    if (debugLog) {log.debug ("setEffect(): Keyset list  ${state.scenes.keySet()}") }
-    if (state.scenes.containsKey(effectNumber)) {
-        if (debugLog) {log.debug ("setEffect(): Device found in built in scenes. Building command") }
-        parms = '{"paramId": '+state.scenes[effectNumber].paramId+', "id": '+effectNumber+'}'
-        sendCommand("lightScene", parms,"devices.capabilities.dynamic_scene")
+    if (effectNo == null) return
+    String effectInput = effectNo.toString().trim()
+    if (debugLog) {log.debug ("setEffect(): Setting effect via cloud api with input: ${effectInput}") }
+    if (debugLog) {log.debug ("setEffect(): Keyset list  ${state.scenes?.keySet()}") }
+
+    String matchedSceneId = null
+    def matchedScene = null
+
+    // 1. Check if effectInput matches a scene ID directly
+    if (state.scenes?.containsKey(effectInput)) {
+        matchedSceneId = effectInput
+        matchedScene = state.scenes[effectInput]
     } else {
-        if (debugLog) {log.debug ("setEffect(): Effect Number not found in standard list sending as DIY ") }
-        cloudActivateDIY (effectNo)        
+        // 2. Check if effectInput matches a scene Name (case-insensitive)
+        def found = state.scenes?.find { id, val ->
+            def name = (val instanceof Map) ? val.name : val
+            name?.toString()?.equalsIgnoreCase(effectInput)
+        }
+        if (found) {
+            matchedSceneId = found.key.toString()
+            matchedScene = found.value
+        }
     }
+
+    if (matchedSceneId && matchedScene) {
+        def paramId = (matchedScene instanceof Map) ? matchedScene.paramId : null
+        def sceneName = (matchedScene instanceof Map) ? matchedScene.name : matchedScene
+        if (debugLog) {log.debug ("setEffect(): Device found in built-in scenes: ID=${matchedSceneId}, Name=${sceneName}, paramId=${paramId}") }
+        sendEvent(name: "effectNum", value: matchedSceneId)
+        if (sceneName) sendEvent(name: "effectName", value: sceneName)
+        parms = '{"paramId": '+paramId+', "id": '+matchedSceneId+'}'
+        sendCommand("lightScene", parms,"devices.capabilities.dynamic_scene")
+        return
+    }
+
+    // 3. Check if effectInput matches a DIY scene by ID or by Name
+    String matchedDiyId = null
+    String matchedDiyName = null
+    if (state.diyScene?.containsKey(effectInput)) {
+        matchedDiyId = effectInput
+        matchedDiyName = state.diyScene[effectInput]?.toString()
+    } else {
+        def foundDiy = state.diyScene?.find { id, name ->
+            name?.toString()?.equalsIgnoreCase(effectInput)
+        }
+        if (foundDiy) {
+            matchedDiyId = foundDiy.key.toString()
+            matchedDiyName = foundDiy.value?.toString()
+        }
+    }
+
+    if (matchedDiyId) {
+        if (debugLog) {log.debug ("setEffect(): DIY Scene found: ID=${matchedDiyId}, Name=${matchedDiyName}") }
+        sendEvent(name: "effectNum", value: matchedDiyId)
+        if (matchedDiyName) sendEvent(name: "effectName", value: matchedDiyName)
+        cloudActivateDIY (matchedDiyId)
+        return
+    }
+
+    if (debugLog) {log.warn ("setEffect(): Effect '${effectInput}' not found in standard scenes or DIY scenes list") }
 }
 
 def cloudSetNextEffect () {
@@ -140,7 +189,16 @@ def cloudSetPreviousEffect () {
 }
 
 def cloudActivateDIY (diyActivate) {
-    sendCommand("diyScene", diyActivate,"devices.capabilities.dynamic_scene")         
+    if (diyActivate == null) return
+    String diyInput = diyActivate.toString().trim()
+    String diyId = diyInput
+    if (!state.diyScene?.containsKey(diyInput)) {
+        def foundDiy = state.diyScene?.find { id, name ->
+            name?.toString()?.equalsIgnoreCase(diyInput)
+        }
+        if (foundDiy) diyId = foundDiy.key.toString()
+    }
+    sendCommand("diyScene", diyId, "devices.capabilities.dynamic_scene")         
 }
 
 def dreamview(on_off) {

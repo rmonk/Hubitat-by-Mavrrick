@@ -672,9 +672,9 @@ def retrieveDIYScenes(){
         gvscenes[id] = value.name
     }
     if (debugLog) { log.debug "retrieveDIYScenes():Govee Scene list for lighteffect attribute is :"+gvscenes}
-//    def le = new groovy.json.JsonBuilder(state.scenes + state.diyScene)
-    def le = new groovy.json.JsonBuilder(gvscenes + state.diyScene)
+    def le = new groovy.json.JsonBuilder(gvscenes + (state.diyScene ?: [:]))
     sendEvent(name: "lightEffects", value: le)
+    buildSceneCatalogHtml()
     long endTime = now()
     long duration = endTime - startTime
     long respDuration = respTime - startTime
@@ -912,5 +912,26 @@ void loadState(){
         }
     }   else {
         off()
+    }
+}
+
+def buildSceneCatalogHtml() {
+    try {
+        def html = new StringBuilder()
+        html.append("<div style='font-size:12px; max-height:250px; overflow-y:auto; border:1px solid #ddd; padding:4px;'>")
+        html.append("<table style='width:100%; border-collapse:collapse; text-align:left;'>")
+        html.append("<tr style='border-bottom:1px solid #888; background:#f0f0f0;'><th>Type</th><th>ID</th><th>Name</th></tr>")
+
+        state.scenes?.sort { a, b -> (a.value?.name ?: '') <=> (b.value?.name ?: '') }?.each { id, val ->
+            def name = (val instanceof Map) ? val.name : val
+            html.append("<tr style='border-bottom:1px solid #eee;'><td>Scene</td><td><code>${id}</code></td><td><b>${name}</b></td></tr>")
+        }
+        state.diyScene?.sort { a, b -> (a.value ?: '') <=> (b.value ?: '') }?.each { id, name ->
+            html.append("<tr style='border-bottom:1px solid #eee; color:#0066cc;'><td>DIY</td><td><code>${id}</code></td><td><b>${name}</b></td></tr>")
+        }
+        html.append("</table></div>")
+        sendEvent(name: "sceneCatalog", value: html.toString())
+    } catch (Exception e) {
+        if (debugLog) log.warn "buildSceneCatalogHtml(): Error generating html catalog: ${e}"
     }
 }

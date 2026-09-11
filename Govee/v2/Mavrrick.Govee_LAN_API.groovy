@@ -338,30 +338,45 @@ def fadeUp( int curLevel, int level, fadeInt, fadeRep) {
 } 
 
 def lanSetEffect (effectNo) {
-    effectNumber = effectNo.toString()
+    if (effectNo == null) return
+    String effectInput = effectNo.toString().trim()
     lanScenes = loadSceneFile()
-    if (descLog) log.info "${device.label} SetEffect: ${effectNumber}"
-    if (lanScenes.keySet().contains(device.getDataValue("DevType"))) {
+    if (descLog) log.info "${device.label} SetEffect: ${effectInput}"
+    if (lanScenes?.keySet()?.contains(device.getDataValue("DevType"))) {
         tag = device.getDataValue("DevType")
-    } else if (lanScenes.keySet().contains(device.getDataValue("deviceModel"))) {
+    } else if (lanScenes?.keySet()?.contains(device.getDataValue("deviceModel"))) {
         tag = device.getDataValue("deviceModel")
     } 
-    if (debugLog) log.debug "${lanScenes.get("${tag}").keySet()}"
-    if (lanScenes.get("${tag}").containsKey(effectNumber)) {
-        String sceneInfo =  lanScenes.get("${tag}").get(effectNumber).name
-        String sceneCmd =  lanScenes.get("${tag}").get(effectNumber).cmd
-        if (debugLog) {log.debug ("setEffect(): Activate effect number ${effectNo} called ${sceneInfo} with command ${sceneCmd}")}
+    if (debugLog) log.debug "${lanScenes?.get("${tag}")?.keySet()}"
+
+    def scenesMap = lanScenes?.get("${tag}")
+    String matchedKey = null
+    if (scenesMap?.containsKey(effectInput)) {
+        matchedKey = effectInput
+    } else {
+        def found = scenesMap?.find { k, v ->
+            v?.name?.equalsIgnoreCase(effectInput)
+        }
+        if (found) {
+            matchedKey = found.key
+        }
+    }
+
+    if (matchedKey && scenesMap.containsKey(matchedKey)) {
+        String sceneInfo = scenesMap.get(matchedKey).name
+        String sceneCmd = scenesMap.get(matchedKey).cmd
+        if (debugLog) {log.debug ("setEffect(): Activate effect number ${matchedKey} called ${sceneInfo} with command ${sceneCmd}")}
         if (debugLog) log.debug "Scene number is present"
         sendEvent(name: "colorMode", value: "EFFECTS")
         sendEvent(name: "effectName", value: sceneInfo)
-        sendEvent(name: "effectNum", value: effectNumber)
+        sendEvent(name: "effectNum", value: matchedKey)
         sendEvent(name: "switch", value: "on")
         String cmd2 = '{"msg":{"cmd":"ptReal","data":{"command":'+sceneCmd+'}}}'
         if (debugLog) {log.debug ("setEffect(): command to be sent to ${cmd2}")}
         sendCommandLan(cmd2)
-   } else {
-        if (debugLog) {log.debug ("setEffect(): Effect Number not found for built in scenes. Passing  ${effectNumber}to Activate DIY ")}
-        lanActivateDIY(effectNumber)
+    } else {
+        if (debugLog) {log.debug ("setEffect(): Effect Number not found for built in scenes. Passing ${effectInput} to Activate DIY ")}
+        lanActivateDIY(effectInput)
     } 
 }
 
@@ -528,13 +543,25 @@ def lanSetPreviousEffect () {
 }
 
 def lanActivateDIY (diyActivate) {
+    if (diyActivate == null) return
+    String diyInput = diyActivate.toString().trim()
     diyScenes = loadDIYFile()
-    if (descLog) log.info "${device.label} ActivateDIY: ${diyActivate}"
-    if (debugLog) {log.debug ("activateDIY(): Activate effect number ${diyActivate} from ${diyScenes}")}
-        String diyEffectNumber = diyActivate.toString()
-        String sceneInfo = diyScenes.get(device.getDataValue("deviceModel")).get(diyEffectNumber).name
-        String sceneCmd = diyScenes.get(device.getDataValue("deviceModel")).get(diyEffectNumber).cmd
-        if (debugLog) {log.debug ("activateDIY(): Activate effect number ${diyActivate} called ${sceneInfo} with command ${sceneCmd}")}
+    if (descLog) log.info "${device.label} ActivateDIY: ${diyInput}"
+    if (debugLog) {log.debug ("activateDIY(): Activate effect number ${diyInput} from ${diyScenes}")}
+    def modelScenes = diyScenes?.get(device.getDataValue("deviceModel"))
+    String diyEffectNumber = null
+    if (modelScenes?.containsKey(diyInput)) {
+        diyEffectNumber = diyInput
+    } else {
+        def found = modelScenes?.find { k, v ->
+            v?.name?.equalsIgnoreCase(diyInput)
+        }
+        if (found) diyEffectNumber = found.key
+    }
+    if (diyEffectNumber && modelScenes?.containsKey(diyEffectNumber)) {
+        String sceneInfo = modelScenes.get(diyEffectNumber).name
+        String sceneCmd = modelScenes.get(diyEffectNumber).cmd
+        if (debugLog) {log.debug ("activateDIY(): Activate effect number ${diyEffectNumber} called ${sceneInfo} with command ${sceneCmd}")}
         sendEvent(name: "effectName", value: sceneInfo)
         sendEvent(name: "effectNum", value: diyEffectNumber)
         sendEvent(name: "switch", value: "on")
@@ -542,6 +569,9 @@ def lanActivateDIY (diyActivate) {
         String cmd2 = '{"msg":{"cmd":"ptReal","data":{"command":'+sceneCmd+'}}}'
         if (debugLog) {log.debug ("activateDIY(): command to be sent to ${cmd2}")}
         sendCommandLan(cmd2)
+    } else {
+        if (debugLog) {log.warn ("activateDIY(): DIY scene '${diyInput}' not found for model ${device.getDataValue("deviceModel")}")}
+    }
 }
 
 /////////////////////////////////////////////////////
@@ -598,6 +628,7 @@ def retrieveScenes() {
     }
     def le = new groovy.json.JsonBuilder(state.scenes + state.diyScene)
     sendEvent(name: "lightEffects", value: le)
+    buildSceneCatalogHtml()
 }
 
 void getDevType() {
