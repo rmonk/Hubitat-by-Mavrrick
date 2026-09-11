@@ -1,0 +1,8 @@
+Mavrrick
+Govee_Integration_v2
+library Mavrrick.Govee_Cloud_API.groovy
+library Mavrrick.Govee_Cloud_Level.groovy
+library Mavrrick.Govee_Cloud_RGB.groovy
+library Mavrrick.Govee_Cloud_MQTT.groovy
+library Mavrrick.Govee_LAN_API.groovy
+library Mavrrick.Govee_Cloud_Life.groovy
