@@ -409,6 +409,110 @@ private def findGoveeDevice(String dni) {
     return allDevs.find { it.deviceNetworkId == dni }
 }
 
+private def getSceneVisualMetadata(String sceneName) {
+    if (!sceneName) return [colors: ["#888888"], gradient: "linear-gradient(90deg, #666666, #aaaaaa)", emoji: "✨", mood: "Unknown"]
+    String n = sceneName.toLowerCase().trim()
+
+    def colors = []
+    def emoji = "✨"
+    def mood = "Ambient Preset"
+
+    // 1. Holiday & Events
+    if (n.contains("christmas") || n.contains("xmas") || n.contains("santa")) {
+        colors = ["#a8001e", "#0b6623", "#d4af37", "#ffffff"]
+        emoji = "🎄"
+        mood = "Festive Holiday"
+    } else if (n.contains("halloween") || n.contains("pumpkin") || n.contains("spooky")) {
+        colors = ["#1a052b", "#e65100", "#f57c00", "#00c853"]
+        emoji = "🎃"
+        mood = "Spooky Autumn"
+    } else if (n.contains("valentine") || n.contains("romantic") || n.contains("sweet") || n.contains("love")) {
+        colors = ["#4a0e2e", "#880e4f", "#d81b60", "#f48fb1"]
+        emoji = "💖"
+        mood = "Warm Rose & Pink"
+    } else if (n.contains("birthday") || n.contains("celebration") || n.contains("party") || n.contains("carnival") || n.contains("disco")) {
+        colors = ["#ff007f", "#7928ca", "#00f0ff", "#ffea00"]
+        emoji = "🎉"
+        mood = "Vibrant Celebration"
+    } else if (n.contains("candle") || n.contains("fireplace")) {
+        colors = ["#591a00", "#d35400", "#f39c12", "#f1c40f"]
+        emoji = "🕯️"
+        mood = "Warm Amber Glow"
+    }
+    // 2. Sky & Atmosphere
+    else if (n.contains("sunset") || n.contains("dusk") || n.contains("twilight")) {
+        colors = ["#2c1654", "#9b1d5e", "#e35242", "#f9b233"]
+        emoji = "🌅"
+        mood = "Evening Sunset"
+    } else if (n.contains("sunrise") || n.contains("dawn") || n.contains("morning") || n.contains("awaken")) {
+        colors = ["#ff6e7f", "#fbc79a", "#fff1b0", "#bfe9ff"]
+        emoji = "🌄"
+        mood = "Gentle Morning"
+    } else if (n.contains("aurora") || n.contains("polar")) {
+        colors = ["#002b36", "#00ff87", "#60efff", "#b026ff"]
+        emoji = "🌌"
+        mood = "Northern Lights"
+    } else if (n.contains("rainbow") || n.contains("spectrum") || n.contains("colorful")) {
+        colors = ["#e53935", "#fb8c00", "#fdd835", "#43a047", "#1e88e5", "#8e24aa"]
+        emoji = "🌈"
+        mood = "Full Spectrum"
+    } else if (n.contains("star") || n.contains("galaxy") || n.contains("universe") || n.contains("space") || n.contains("meteor") || n.contains("cosmos")) {
+        colors = ["#050814", "#152042", "#2d427d", "#7289da", "#e0e7ff"]
+        emoji = "✨"
+        mood = "Deep Cosmic Night"
+    } else if (n.contains("lightning") || n.contains("thunder") || n.contains("storm") || n.contains("flash")) {
+        colors = ["#0d1333", "#283593", "#7986cb", "#fff59d"]
+        emoji = "⚡"
+        mood = "High Contrast Storm"
+    }
+    // 3. Fire & Heat
+    else if (n.contains("fire") || n.contains("flame") || n.contains("bonfire") || n.contains("volcano") || n.contains("lava")) {
+        colors = ["#7a0000", "#d83a00", "#ff7700", "#ffdd00"]
+        emoji = "🔥"
+        mood = "Warm & Fiery"
+    }
+    // 4. Water & Ice
+    else if (n.contains("ocean") || n.contains("sea") || n.contains("deep") || n.contains("marine") || n.contains("wave") || n.contains("water") || n.contains("aqua") || n.contains("lake") || n.contains("river")) {
+        colors = ["#001026", "#003b73", "#0074d9", "#39cccc"]
+        emoji = "🌊"
+        mood = "Cool Ocean Waters"
+    } else if (n.contains("ice") || n.contains("winter") || n.contains("glacier") || n.contains("snow") || n.contains("frost") || n.contains("cold")) {
+        colors = ["#0d47a1", "#0288d1", "#4fc3f7", "#e1f5fe"]
+        emoji = "❄️"
+        mood = "Crisp Blue & White"
+    }
+    // 5. Nature & Earth
+    else if (n.contains("forest") || n.contains("tree") || n.contains("jungle") || n.contains("wood") || n.contains("bamboo") || n.contains("grass") || n.contains("nature") || n.contains("green")) {
+        colors = ["#0a2f0a", "#1b5e20", "#388e3c", "#8bc34a"]
+        emoji = "🌲"
+        mood = "Lush Green Forest"
+    } else if (n.contains("flower") || n.contains("blossom") || n.contains("cherry") || n.contains("spring") || n.contains("bloom") || n.contains("rose") || n.contains("garden")) {
+        colors = ["#1b5e20", "#ad1457", "#e91e63", "#f8bbd0"]
+        emoji = "🌸"
+        mood = "Floral Spring Blooms"
+    } else if (n.contains("fall") || n.contains("autumn") || n.contains("harvest") || n.contains("leaf") || n.contains("leaves")) {
+        colors = ["#4a1500", "#b23c00", "#e67e22", "#f1c40f"]
+        emoji = "🍂"
+        mood = "Golden Autumn Foliage"
+    } else if (n.contains("desert") || n.contains("sand") || n.contains("dune") || n.contains("gobi")) {
+        colors = ["#3e2723", "#8d6e63", "#d7ccc8", "#fbe9e7"]
+        emoji = "🏜️"
+        mood = "Warm Earth & Sand"
+    } else if (n.contains("diy") || n.contains("[diy]")) {
+        colors = ["#1a237e", "#4a148c", "#880e4f", "#e65100"]
+        emoji = "🎨"
+        mood = "Custom DIY Effect"
+    } else {
+        int h = Math.abs(sceneName.hashCode())
+        colors = ["hsl(${h % 360}, 75%, 50%)", "hsl(${(h + 45) % 360}, 75%, 55%)", "hsl(${(h + 90) % 360}, 75%, 60%)"]
+        emoji = "✨"
+        mood = "Ambient Preset"
+    }
+
+    def gradient = "linear-gradient(90deg, " + colors.join(", ") + ")"
+    return [colors: colors, gradient: gradient, emoji: emoji, mood: mood]
+}
+
 def sceneController() {
     dynamicPage(name: 'sceneController', title: 'Govee Device Scene Controller', uninstall: false, install: false, submitOnChange: true, nextPage: "mainPage") {
         section('<b>Select Device to Control</b>') {
@@ -438,12 +542,14 @@ def sceneController() {
                 section('<b>Scene Selection</b>') {
                     def leJson = dev.currentValue("lightEffects")
                     def sceneOptions = [:]
+                    def parsedScenes = [:]
                     if (leJson) {
                         try {
                             def jsonSlurper = new JsonSlurper()
-                            def parsed = jsonSlurper.parseText(leJson)
-                            parsed.sort { it.value?.toString()?.toLowerCase() }.each { k, v ->
-                                sceneOptions[k.toString()] = "${v} (ID: ${k})"
+                            parsedScenes = jsonSlurper.parseText(leJson)
+                            parsedScenes.sort { it.value?.toString()?.toLowerCase() }.each { k, v ->
+                                def meta = getSceneVisualMetadata(v?.toString())
+                                sceneOptions[k.toString()] = "${meta.emoji} ${v} (ID: ${k})"
                             }
                         } catch (Exception e) {
                             paragraph "Error reading scenes: ${e.message}"
@@ -451,6 +557,28 @@ def sceneController() {
                     }
                     if (sceneOptions) {
                         input 'ctrlSelectedScene', 'enum', title: 'Choose Scene from Drop-down', options: sceneOptions, required: true, submitOnChange: true
+
+                        // Live Real-Time Visual Preview Card
+                        if (settings.ctrlSelectedScene && parsedScenes.containsKey(settings.ctrlSelectedScene)) {
+                            def selName = parsedScenes[settings.ctrlSelectedScene]
+                            def selMeta = getSceneVisualMetadata(selName?.toString())
+                            def cardHtml = "<div style='background:#ffffff; border:1px solid #dcdcdc; border-radius:8px; padding:12px; margin:10px 0; box-shadow:0 1px 4px rgba(0,0,0,0.06);'>"
+                            cardHtml += "<div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;'>"
+                            cardHtml += "<span style='font-size:15px; font-weight:bold;'>${selMeta.emoji} ${selName} <span style='font-size:12px; color:#777; font-weight:normal;'>(ID: ${settings.ctrlSelectedScene})</span></span>"
+                            cardHtml += "<span style='font-size:11px; background:#e8f0fe; color:#1a73e8; border-radius:12px; padding:2px 8px; font-weight:600;'>${selMeta.mood}</span>"
+                            cardHtml += "</div>"
+                            cardHtml += "<div style='height:24px; width:100%; border-radius:6px; background:${selMeta.gradient}; margin-bottom:8px; box-shadow:inset 0 1px 2px rgba(0,0,0,0.2), 0 1px 3px rgba(0,0,0,0.1);'></div>"
+                            cardHtml += "<div style='display:flex; align-items:center; gap:6px; flex-wrap:wrap;'>"
+                            cardHtml += "<span style='font-size:11px; color:#666; font-weight:bold; margin-right:4px;'>PALETTE:</span>"
+                            selMeta.colors.each { c ->
+                                cardHtml += "<span style='display:inline-flex; align-items:center; background:#f9f9f9; border:1px solid #ccc; border-radius:4px; padding:2px 6px; font-size:11px; font-family:monospace;'>"
+                                cardHtml += "<span style='display:inline-block; width:11px; height:11px; border-radius:50%; background:${c}; margin-right:4px; border:1px solid rgba(0,0,0,0.2);'></span>"
+                                cardHtml += "${c.toUpperCase()}</span>"
+                            }
+                            cardHtml += "</div></div>"
+                            paragraph cardHtml
+                        }
+
                         input 'btnActivateScene', 'button', title: 'Activate Selected Scene'
                         if (state.lastActivatedScene && (now() - (state.lastActivatedTime ?: 0)) < 30000) {
                             paragraph "<mark style='background:#d4edda; color:#155724; padding:4px;'>Command sent: Activated scene '${state.lastActivatedSceneName ?: state.lastActivatedScene}'!</mark>"
@@ -466,11 +594,16 @@ def sceneController() {
                         try {
                             def jsonSlurper = new JsonSlurper()
                             def parsed = jsonSlurper.parseText(leJson)
-                            def html = "<div style='max-height:220px; overflow-y:auto; border:1px solid #ddd; padding:4px;'>"
+                            def html = "<div style='max-height:260px; overflow-y:auto; border:1px solid #ddd; padding:4px;'>"
                             html += "<table style='width:100%; border-collapse:collapse; font-size:12px; text-align:left;'>"
-                            html += "<tr style='border-bottom:1px solid #888; background:#f4f4f4;'><th>ID</th><th>Scene Name</th></tr>"
+                            html += "<tr style='border-bottom:1px solid #888; background:#f4f4f4;'><th style='padding:5px;'>ID</th><th style='padding:5px;'>Scene Name</th><th style='padding:5px; width:130px;'>Palette Preview</th></tr>"
                             parsed.sort { it.value?.toString()?.toLowerCase() }.each { k, v ->
-                                html += "<tr style='border-bottom:1px solid #eee;'><td><code>${k}</code></td><td><b>${v}</b></td></tr>"
+                                def rowMeta = getSceneVisualMetadata(v?.toString())
+                                html += "<tr style='border-bottom:1px solid #eee;'>"
+                                html += "<td style='padding:5px;'><code>${k}</code></td>"
+                                html += "<td style='padding:5px;'>${rowMeta.emoji} <b>${v}</b></td>"
+                                html += "<td style='padding:5px;'><div style='height:14px; width:115px; border-radius:7px; background:${rowMeta.gradient}; box-shadow:0 1px 2px rgba(0,0,0,0.2);'></div></td>"
+                                html += "</tr>"
                             }
                             html += "</table></div>"
                             paragraph html
