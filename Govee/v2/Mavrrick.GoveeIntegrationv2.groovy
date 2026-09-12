@@ -576,6 +576,34 @@ def sceneController() {
         if (settings.ctrlDeviceDNI) {
             def dev = findGoveeDevice(settings.ctrlDeviceDNI)
             if (dev) {
+                def leJson = dev.currentValue("lightEffects")
+                def parsedScenes = [:]
+                def filteredScenes = [:]
+                def sceneOptions = [:]
+                if (leJson) {
+                    try {
+                        def jsonSlurper = new JsonSlurper()
+                        parsedScenes = jsonSlurper.parseText(leJson)
+
+                        def activeFilter = settings.sceneColorFilter ?: "all"
+                        def activeSearch = settings.sceneSearchFilter?.toString()?.toLowerCase()?.trim() ?: ""
+
+                        filteredScenes = parsedScenes.findAll { k, v ->
+                            def meta = getSceneVisualMetadata(v?.toString())
+                            def matchesColor = (activeFilter == "all" || meta.category == activeFilter)
+                            def matchesSearch = (!activeSearch || v?.toString()?.toLowerCase()?.contains(activeSearch))
+                            return matchesColor && matchesSearch
+                        }
+
+                        filteredScenes.sort { it.value?.toString()?.toLowerCase() }.each { k, v ->
+                            def meta = getSceneVisualMetadata(v?.toString())
+                            sceneOptions[k.toString()] = "${meta.emoji} ${v} (ID: ${k})"
+                        }
+                    } catch (Exception e) {
+                        logger("sceneController error reading scenes: ${e.message}", 'warn')
+                    }
+                }
+
                 section('<b>Device Status</b>') {
                     def sw = dev.currentValue('switch') ?: 'unknown'
                     def lvl = dev.currentValue('level')
@@ -601,33 +629,6 @@ def sceneController() {
                 }
 
                 section('<b>Scene Selection & Preview</b>') {
-                    def leJson = dev.currentValue("lightEffects")
-                    def sceneOptions = [:]
-                    def parsedScenes = [:]
-                    def filteredScenes = [:]
-                    if (leJson) {
-                        try {
-                            def jsonSlurper = new JsonSlurper()
-                            parsedScenes = jsonSlurper.parseText(leJson)
-
-                            def activeFilter = settings.sceneColorFilter ?: "all"
-                            def activeSearch = settings.sceneSearchFilter?.toString()?.toLowerCase()?.trim() ?: ""
-
-                            filteredScenes = parsedScenes.findAll { k, v ->
-                                def meta = getSceneVisualMetadata(v?.toString())
-                                def matchesColor = (activeFilter == "all" || meta.category == activeFilter)
-                                def matchesSearch = (!activeSearch || v?.toString()?.toLowerCase()?.contains(activeSearch))
-                                return matchesColor && matchesSearch
-                            }
-
-                            filteredScenes.sort { it.value?.toString()?.toLowerCase() }.each { k, v ->
-                                def meta = getSceneVisualMetadata(v?.toString())
-                                sceneOptions[k.toString()] = "${meta.emoji} ${v} (ID: ${k})"
-                            }
-                        } catch (Exception e) {
-                            paragraph "Error reading scenes: ${e.message}"
-                        }
-                    }
                     if (sceneOptions) {
                         input 'ctrlSelectedScene', 'enum', title: 'Choose Scene from Drop-down', options: sceneOptions, required: true, submitOnChange: true
 
