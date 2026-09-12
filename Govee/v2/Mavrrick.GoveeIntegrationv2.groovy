@@ -677,15 +677,18 @@ def sceneController() {
                 }
 
                 section('<b>Available Scenes Catalog</b>') {
-                    if (filteredScenes) {
-                        def html = "<div style='max-height:260px; overflow-y:auto; border:1px solid #ddd; padding:4px;'>"
+                    if (parsedScenes) {
+                        def totalCount = "${parsedScenes.size()} total scenes"
+                        def html = "<div style='max-height:280px; overflow-y:auto; border:1px solid #ddd; padding:4px;'>"
                         html += "<table style='width:100%; border-collapse:collapse; font-size:12px; text-align:left;'>"
                         html += "<tr style='border-bottom:1px solid #888; background:#f4f4f4;'><th style='padding:5px;'>ID</th><th style='padding:5px;'>Scene Name</th><th style='padding:5px;'>Color Theme</th><th style='padding:5px; width:120px;'>Palette Preview</th></tr>"
-                        filteredScenes.sort { it.value?.toString()?.toLowerCase() }.each { k, v ->
+                        parsedScenes.sort { it.value?.toString()?.toLowerCase() }.each { k, v ->
                             def rowMeta = getSceneVisualMetadata(v?.toString())
-                            html += "<tr style='border-bottom:1px solid #eee;'>"
+                            def isSelected = (k.toString() == settings.ctrlSelectedScene?.toString())
+                            def rowBg = isSelected ? "background:#e8f0fe;" : ""
+                            html += "<tr style='border-bottom:1px solid #eee; ${rowBg}'>"
                             html += "<td style='padding:5px;'><code>${k}</code></td>"
-                            html += "<td style='padding:5px;'>${rowMeta.emoji} <b>${v}</b></td>"
+                            html += "<td style='padding:5px;'>${rowMeta.emoji} <b>${v}</b>${isSelected ? " <span style='font-size:10px; color:#1a73e8;'>(Selected)</span>" : ""}</td>"
                             html += "<td style='padding:5px;'><span style='font-size:11px; background:#f0f4f8; padding:2px 6px; border-radius:4px;'>${rowMeta.categoryLabel}</span></td>"
                             html += "<td style='padding:5px;'><div style='height:14px; width:110px; border-radius:7px; background:${rowMeta.gradient}; box-shadow:0 1px 2px rgba(0,0,0,0.2);'></div></td>"
                             html += "</tr>"
