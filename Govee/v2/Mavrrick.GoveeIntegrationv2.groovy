@@ -666,24 +666,13 @@ def sceneController() {
                     }
                 }
 
-                if (filteredScenes) {
-                    section('<b>Click-to-Activate Scene Tiles</b>') {
-                        def filterCount = "${filteredScenes.size()} of ${parsedScenes.size()} scenes"
-                        paragraph "<small style='color:#666;'>Click any scene tile below to activate it immediately on your light (${filterCount}):</small>"
-                        filteredScenes.sort { it.value?.toString()?.toLowerCase() }.each { k, v ->
-                            def meta = getSceneVisualMetadata(v?.toString())
-                            input "btnSelect_${k}", "button", title: "${meta.emoji} ${v}", width: 4
-                        }
-                    }
-                }
-
                 section('<b>Available Scenes Catalog</b>') {
-                    if (parsedScenes) {
-                        def totalCount = "${parsedScenes.size()} total scenes"
+                    if (filteredScenes) {
+                        def filterCount = (filteredScenes.size() == parsedScenes.size()) ? "${parsedScenes.size()} scenes" : "${filteredScenes.size()} of ${parsedScenes.size()} scenes"
                         def html = "<div style='max-height:280px; overflow-y:auto; border:1px solid #ddd; padding:4px;'>"
                         html += "<table style='width:100%; border-collapse:collapse; font-size:12px; text-align:left;'>"
                         html += "<tr style='border-bottom:1px solid #888; background:#f4f4f4;'><th style='padding:5px;'>ID</th><th style='padding:5px;'>Scene Name</th><th style='padding:5px;'>Color Theme</th><th style='padding:5px; width:120px;'>Palette Preview</th></tr>"
-                        parsedScenes.sort { it.value?.toString()?.toLowerCase() }.each { k, v ->
+                        filteredScenes.sort { it.value?.toString()?.toLowerCase() }.each { k, v ->
                             def rowMeta = getSceneVisualMetadata(v?.toString())
                             def isSelected = (k.toString() == settings.ctrlSelectedScene?.toString())
                             def rowBg = isSelected ? "background:#e8f0fe;" : ""
@@ -696,6 +685,12 @@ def sceneController() {
                         }
                         html += "</table></div>"
                         paragraph html
+                    } else {
+                        if (parsedScenes) {
+                            paragraph "No scenes match your filter criteria."
+                        } else {
+                            paragraph "No scenes currently cached on device. Please click 'Scene Load' on the device details page or ensure the device is connected."
+                        }
                     }
                 }
             }
@@ -1805,23 +1800,19 @@ private def appButtonHandler(button) {
             goveeScene.clear()
             goveeSceneRetrieve(it)
         }
-    } else if (button == "btnActivateScene" || button.startsWith("btnSelect_")) {
-        def targetScene = (button == "btnActivateScene") ? settings.ctrlSelectedScene : button.substring("btnSelect_".length())
-        if (button.startsWith("btnSelect_")) {
-            app.updateSetting("ctrlSelectedScene", [value: targetScene, type: "enum"])
-        }
-        if (settings.ctrlDeviceDNI && targetScene) {
+    } else if (button == "btnActivateScene") {
+        if (settings.ctrlDeviceDNI && settings.ctrlSelectedScene) {
             def dev = findGoveeDevice(settings.ctrlDeviceDNI)
             if (dev) {
-                logger("appButtonHandler(): Activating scene ${targetScene} on device ${dev.displayName}", 'info')
-                dev.setEffect(targetScene)
-                state.lastActivatedScene = targetScene
+                logger("appButtonHandler(): Activating scene ${settings.ctrlSelectedScene} on device ${dev.displayName}", 'info')
+                dev.setEffect(settings.ctrlSelectedScene)
+                state.lastActivatedScene = settings.ctrlSelectedScene
                 def leJson = dev.currentValue("lightEffects")
                 if (leJson) {
                     try {
                         def jsonSlurper = new JsonSlurper()
                         def parsed = jsonSlurper.parseText(leJson)
-                        state.lastActivatedSceneName = parsed[targetScene] ?: targetScene
+                        state.lastActivatedSceneName = parsed[settings.ctrlSelectedScene] ?: settings.ctrlSelectedScene
                     } catch (Exception e) {}
                 }
                 state.lastActivatedTime = now()
