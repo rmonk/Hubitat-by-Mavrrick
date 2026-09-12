@@ -1,4 +1,4 @@
-.PHONY: all build clean bundle-govee-v2
+.PHONY: all build clean bundle-govee-v2 sync sync-all sync-list
 
 BUILD_DIR := build
 GOVEE_V2_DIR := Govee/v2
@@ -7,6 +7,15 @@ GOVEE_BUNDLE_DIR := Govee/bundle
 all: build
 
 build: bundle-govee-v2
+
+sync:
+	python3 scripts/hubitat_sync.py push Govee/v2/Mavrrick.Goveev2ColorLights3Driver.groovy Govee/v2/Mavrrick.GoveeIntegrationv2.groovy
+
+sync-all:
+	python3 scripts/hubitat_sync.py push-all
+
+sync-list:
+	python3 scripts/hubitat_sync.py list
 
 bundle-govee-v2:
 	@mkdir -p $(BUILD_DIR)/govee-v2-bundle
