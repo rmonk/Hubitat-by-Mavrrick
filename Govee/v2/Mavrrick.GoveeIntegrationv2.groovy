@@ -604,12 +604,37 @@ def sceneController() {
                     }
                 }
 
-                section('<b>Device Status</b>') {
+                section('<b>Device Status & Power / Brightness Controls</b>') {
                     def sw = dev.currentValue('switch') ?: 'unknown'
                     def lvl = dev.currentValue('level')
                     def eff = dev.currentValue('effectName') ?: 'None'
                     def effNum = dev.currentValue('effectNum') ?: 'None'
-                    paragraph "<b>Power:</b> ${sw.toUpperCase()} | <b>Level:</b> ${lvl != null ? lvl + '%' : 'N/A'} | <b>Active Scene:</b> ${eff} (ID: ${effNum})"
+                    def swBadge = (sw == 'on') ? "<span style='background:#28a745; color:#fff; padding:2px 8px; border-radius:10px; font-weight:bold; font-size:11px;'>ON</span>" : "<span style='background:#6c757d; color:#fff; padding:2px 8px; border-radius:10px; font-weight:bold; font-size:11px;'>OFF</span>"
+
+                    paragraph "<b>Power:</b> ${swBadge} | <b>Level:</b> <b>${lvl != null ? lvl + '%' : 'N/A'}</b> | <b>Active Scene:</b> ${eff} (ID: ${effNum})"
+
+                    // Power Controls
+                    input 'btnPowerOn', 'button', title: 'Turn On 🟢', width: 3
+                    input 'btnPowerOff', 'button', title: 'Turn Off 🔴', width: 3
+                    input 'btnPowerToggle', 'button', title: 'Toggle Power ⚡', width: 3
+
+                    if (state.lastPowerMessage && (now() - (state.lastPowerTime ?: 0)) < 15000) {
+                        paragraph "<mark style='background:#d4edda; color:#155724; padding:3px 8px; border-radius:4px;'>${state.lastPowerMessage}</mark>"
+                    }
+
+                    paragraph "<hr style='margin:8px 0; border:0; border-top:1px solid #e0e0e0;'>"
+
+                    // Brightness Level Controls
+                    input 'ctrlDeviceLevel', 'number', title: 'Brightness (0-100%)', range: '0..100', defaultValue: (lvl != null ? lvl.toInteger() : 100), width: 3
+                    input 'btnSetLevel', 'button', title: 'Apply Level', width: 3
+                    input 'btnLevel25', 'button', title: '25%', width: 1
+                    input 'btnLevel50', 'button', title: '50%', width: 1
+                    input 'btnLevel75', 'button', title: '75%', width: 1
+                    input 'btnLevel100', 'button', title: '100%', width: 1
+
+                    if (state.lastLevelMessage && (now() - (state.lastLevelTime ?: 0)) < 15000) {
+                        paragraph "<mark style='background:#d4edda; color:#155724; padding:3px 8px; border-radius:4px;'>${state.lastLevelMessage}</mark>"
+                    }
                 }
 
                 section('<b>Filter Scenes by Color Theme & Name</b>') {
@@ -1799,6 +1824,67 @@ private def appButtonHandler(button) {
             logger("appButtonHandler(): Processing  ${it}", 'info')
             goveeScene.clear()
             goveeSceneRetrieve(it)
+        }
+    } else if (button == "btnPowerOn") {
+        if (settings.ctrlDeviceDNI) {
+            def dev = findGoveeDevice(settings.ctrlDeviceDNI)
+            if (dev) {
+                logger("appButtonHandler(): Turning ON device ${dev.displayName}", 'info')
+                dev.on()
+                state.lastPowerMessage = "Turned ON ${dev.displayName}"
+                state.lastPowerTime = now()
+            }
+        }
+    } else if (button == "btnPowerOff") {
+        if (settings.ctrlDeviceDNI) {
+            def dev = findGoveeDevice(settings.ctrlDeviceDNI)
+            if (dev) {
+                logger("appButtonHandler(): Turning OFF device ${dev.displayName}", 'info')
+                dev.off()
+                state.lastPowerMessage = "Turned OFF ${dev.displayName}"
+                state.lastPowerTime = now()
+            }
+        }
+    } else if (button == "btnPowerToggle") {
+        if (settings.ctrlDeviceDNI) {
+            def dev = findGoveeDevice(settings.ctrlDeviceDNI)
+            if (dev) {
+                def curSw = dev.currentValue('switch')
+                if (curSw == 'on') {
+                    dev.off()
+                    state.lastPowerMessage = "Turned OFF ${dev.displayName}"
+                } else {
+                    dev.on()
+                    state.lastPowerMessage = "Turned ON ${dev.displayName}"
+                }
+                state.lastPowerTime = now()
+            }
+        }
+    } else if (button == "btnSetLevel" || button == "btnLevel25" || button == "btnLevel50" || button == "btnLevel75" || button == "btnLevel100") {
+        if (settings.ctrlDeviceDNI) {
+            def dev = findGoveeDevice(settings.ctrlDeviceDNI)
+            if (dev) {
+                def targetLevel = 100
+                if (button == "btnLevel25") targetLevel = 25
+                else if (button == "btnLevel50") targetLevel = 50
+                else if (button == "btnLevel75") targetLevel = 75
+                else if (button == "btnLevel100") targetLevel = 100
+                else if (settings.ctrlDeviceLevel != null) {
+                    try {
+                        targetLevel = settings.ctrlDeviceLevel.toInteger()
+                    } catch (Exception e) {
+                        targetLevel = 100
+                    }
+                }
+                if (targetLevel < 0) targetLevel = 0
+                if (targetLevel > 100) targetLevel = 100
+
+                logger("appButtonHandler(): Setting level to ${targetLevel}% on device ${dev.displayName}", 'info')
+                dev.setLevel(targetLevel)
+                app.updateSetting('ctrlDeviceLevel', [value: targetLevel, type: 'number'])
+                state.lastLevelMessage = "Set ${dev.displayName} brightness to ${targetLevel}%"
+                state.lastLevelTime = now()
+            }
         }
     } else if (button == "btnActivateScene") {
         if (settings.ctrlDeviceDNI && settings.ctrlSelectedScene) {
