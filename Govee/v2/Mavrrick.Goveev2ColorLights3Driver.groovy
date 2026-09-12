@@ -146,13 +146,16 @@ def updated() {
     if (settings.prefSelectedScene) {
         if (descLog) log.info "${device.label} Scene Selection: applying scene '${settings.prefSelectedScene}' on save"
         // Delay to let retrieveScenes2()/retrieveDIYScenes() HTTP callbacks populate state.scenes
-        def scene = settings.prefSelectedScene
-        def options = [uniqueName: 'applyPrefScene']
-        runIn(3, {
-            if (descLog) log.info "${device.label} Scene Selection: activating scene '${scene}'"
-            setEffect(scene)
-            if (descLog) log.info "${device.label} Scene Selection: scene '${scene}' command sent"
-        }, options)
+        runIn(3, 'applySelectedPrefScene', [overwrite: true, data: [scene: settings.prefSelectedScene]])
+    }
+}
+
+def applySelectedPrefScene(data = null) {
+    def scene = (data instanceof Map && data.scene) ? data.scene : settings.prefSelectedScene
+    if (scene) {
+        if (descLog) log.info "${device.label} Scene Selection: activating scene '${scene}'"
+        setEffect(scene)
+        if (descLog) log.info "${device.label} Scene Selection: scene '${scene}' command sent"
     }
 }
 
