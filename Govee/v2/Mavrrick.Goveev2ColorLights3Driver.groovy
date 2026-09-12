@@ -115,8 +115,6 @@ metadata {
             }
             if (sceneOptions) {
                 input(name: "prefSelectedScene", type: "enum", title: "Select Scene from Dropdown (applied on Save)", options: sceneOptions)
-            } else {
-                paragraph "No scenes cached. Run the 'Scene Load' command on this device, then re-open preferences."
             }
 		}
 	}
