@@ -798,16 +798,38 @@ def addSceneSchedule(params = [:]) {
             state.editingScheduleId = params.ruleId
             def rule = state.sceneSchedules?.get(params.ruleId)
             if (rule) {
-                app.updateSetting("newSchedName", [value: rule.name, type: "string"])
-                app.updateSetting("newSchedDeviceDNI", [value: rule.deviceDNI, type: "enum"])
-                app.updateSetting("newSchedTriggerType", [value: rule.triggerType, type: "enum"])
-                app.updateSetting("newSchedSunOffset", [value: rule.sunOffset, type: "number"])
-                app.updateSetting("newSchedTime", [value: rule.timeOfDay, type: "time"])
-                app.updateSetting("newSchedDays", [value: rule.daysOfWeek, type: "enum"])
-                app.updateSetting("newSchedScene", [value: rule.sceneId, type: "enum"])
-                app.updateSetting("newSchedTurnOn", [value: rule.turnOn, type: "bool"])
-                app.updateSetting("newSchedSetLevel", [value: rule.setLevel, type: "bool"])
-                app.updateSetting("newSchedLevel", [value: rule.level, type: "number"])
+                app.updateSetting("newSchedName", [value: rule.name ?: "", type: "string"])
+                if (rule.deviceDNI) {
+                    app.updateSetting("newSchedDeviceDNI", [value: rule.deviceDNI, type: "enum"])
+                }
+                app.updateSetting("newSchedTriggerType", [value: rule.triggerType ?: "sunset", type: "enum"])
+                if (rule.sunOffset != null) {
+                    app.updateSetting("newSchedSunOffset", [value: rule.sunOffset, type: "number"])
+                } else {
+                    app.clearSetting("newSchedSunOffset")
+                }
+                if (rule.timeOfDay) {
+                    app.updateSetting("newSchedTime", [value: rule.timeOfDay, type: "time"])
+                } else {
+                    app.clearSetting("newSchedTime")
+                }
+                if (rule.daysOfWeek) {
+                    app.updateSetting("newSchedDays", [value: rule.daysOfWeek, type: "enum"])
+                } else {
+                    app.clearSetting("newSchedDays")
+                }
+                if (rule.sceneId) {
+                    app.updateSetting("newSchedScene", [value: rule.sceneId, type: "enum"])
+                } else {
+                    app.clearSetting("newSchedScene")
+                }
+                app.updateSetting("newSchedTurnOn", [value: (rule.turnOn != null ? rule.turnOn : true), type: "bool"])
+                app.updateSetting("newSchedSetLevel", [value: (rule.setLevel != null ? rule.setLevel : true), type: "bool"])
+                if (rule.level != null) {
+                    app.updateSetting("newSchedLevel", [value: rule.level, type: "number"])
+                } else {
+                    app.clearSetting("newSchedLevel")
+                }
             }
         }
     }
