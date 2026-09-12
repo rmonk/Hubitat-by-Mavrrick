@@ -726,7 +726,60 @@ def sceneController() {
     }
 }
 
+private def saveCurrentSchedule() {
+    if (!settings.newSchedDeviceDNI || !settings.newSchedScene) return false
+
+    def dev = findGoveeDevice(settings.newSchedDeviceDNI)
+    def sceneName = settings.newSchedScene
+    if (dev) {
+        def leJson = dev.currentValue("lightEffects")
+        if (leJson) {
+            try {
+                def jsonSlurper = new JsonSlurper()
+                def parsed = jsonSlurper.parseText(leJson)
+                sceneName = parsed[settings.newSchedScene] ?: settings.newSchedScene
+            } catch (Exception e) {}
+        }
+    }
+
+    def isEdit = (state.editingScheduleId && state.sceneSchedules?.containsKey(state.editingScheduleId))
+    def ruleId = isEdit ? state.editingScheduleId : ("sched_" + now())
+    def prevRule = isEdit ? state.sceneSchedules[ruleId] : null
+
+    def rule = [
+        id: ruleId,
+        name: settings.newSchedName ?: "Scheduled Scene",
+        deviceDNI: settings.newSchedDeviceDNI,
+        triggerType: settings.newSchedTriggerType ?: "sunset",
+        sunOffset: (settings.newSchedSunOffset != null) ? settings.newSchedSunOffset.toInteger() : 0,
+        timeOfDay: settings.newSchedTime,
+        daysOfWeek: settings.newSchedDays ?: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        sceneId: settings.newSchedScene,
+        sceneName: sceneName,
+        turnOn: (settings.newSchedTurnOn != null) ? settings.newSchedTurnOn : true,
+        setLevel: (settings.newSchedSetLevel != null) ? settings.newSchedSetLevel : true,
+        level: (settings.newSchedLevel != null) ? settings.newSchedLevel.toInteger() : 80,
+        enabled: (prevRule != null) ? prevRule.enabled : true,
+        created: (prevRule != null) ? prevRule.created : now(),
+        updated: now()
+    ]
+
+    if (state.sceneSchedules == null) state.sceneSchedules = [:]
+    state.sceneSchedules[ruleId] = rule
+    state.editingScheduleId = null
+    rescheduleAllSceneRules()
+
+    def actionDesc = isEdit ? "Updated" : "Saved & activated"
+    state.lastScheduleSaveMessage = "${actionDesc} schedule '${rule.name}'!"
+    state.lastScheduleSaveTime = now()
+    logger("${actionDesc} scene schedule rule: ${rule.name} (${ruleId})", 'info')
+    return true
+}
+
 def sceneSchedules() {
+    if (state.editingScheduleId && settings.newSchedDeviceDNI && settings.newSchedScene) {
+        saveCurrentSchedule()
+    }
     dynamicPage(name: 'sceneSchedules', title: 'Automated Scene Schedules', uninstall: false, install: false, nextPage: "mainPage") {
         section('<b>Configured Scene Schedules</b>') {
             if (state.sceneSchedules && !state.sceneSchedules.isEmpty()) {
@@ -794,7 +847,7 @@ def addSceneSchedule(params = [:]) {
             ["newSchedName", "newSchedDeviceDNI", "newSchedTriggerType", "newSchedSunOffset", "newSchedTime", "newSchedDays", "newSchedScene", "newSchedTurnOn", "newSchedSetLevel", "newSchedLevel"].each {
                 app.clearSetting(it)
             }
-        } else {
+        } else if (state.editingScheduleId != params.ruleId) {
             state.editingScheduleId = params.ruleId
             def rule = state.sceneSchedules?.get(params.ruleId)
             if (rule) {
@@ -845,7 +898,7 @@ def addSceneSchedule(params = [:]) {
             }
         }
         section('<b>1. Schedule Info & Target Light Device</b>') {
-            input 'newSchedName', 'string', title: 'Schedule Name', required: true, defaultValue: (activeRule?.name ?: 'Evening Sunset Scene')
+            input 'newSchedName', 'string', title: 'Schedule Name', required: true, defaultValue: (activeRule?.name ?: 'Evening Sunset Scene'), submitOnChange: true
             def devOptions = [:]
             getAllGoveeChildDevices().each { dev ->
                 if (dev.hasCapability("LightEffects") || dev.currentValue("lightEffects")) {
@@ -2272,52 +2325,7 @@ private def appButtonHandler(button) {
             }
         }
     } else if (button == "btnSaveNewSchedule") {
-        if (settings.newSchedDeviceDNI && settings.newSchedScene) {
-            def dev = findGoveeDevice(settings.newSchedDeviceDNI)
-            def sceneName = settings.newSchedScene
-            if (dev) {
-                def leJson = dev.currentValue("lightEffects")
-                if (leJson) {
-                    try {
-                        def jsonSlurper = new JsonSlurper()
-                        def parsed = jsonSlurper.parseText(leJson)
-                        sceneName = parsed[settings.newSchedScene] ?: settings.newSchedScene
-                    } catch (Exception e) {}
-                }
-            }
-
-            def isEdit = (state.editingScheduleId && state.sceneSchedules?.containsKey(state.editingScheduleId))
-            def ruleId = isEdit ? state.editingScheduleId : ("sched_" + now())
-            def prevRule = isEdit ? state.sceneSchedules[ruleId] : null
-
-            def rule = [
-                id: ruleId,
-                name: settings.newSchedName ?: "Scheduled Scene",
-                deviceDNI: settings.newSchedDeviceDNI,
-                triggerType: settings.newSchedTriggerType ?: "sunset",
-                sunOffset: (settings.newSchedSunOffset != null) ? settings.newSchedSunOffset.toInteger() : 0,
-                timeOfDay: settings.newSchedTime,
-                daysOfWeek: settings.newSchedDays ?: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-                sceneId: settings.newSchedScene,
-                sceneName: sceneName,
-                turnOn: (settings.newSchedTurnOn != null) ? settings.newSchedTurnOn : true,
-                setLevel: (settings.newSchedSetLevel != null) ? settings.newSchedSetLevel : true,
-                level: (settings.newSchedLevel != null) ? settings.newSchedLevel.toInteger() : 80,
-                enabled: (prevRule != null) ? prevRule.enabled : true,
-                created: (prevRule != null) ? prevRule.created : now(),
-                updated: now()
-            ]
-
-            if (state.sceneSchedules == null) state.sceneSchedules = [:]
-            state.sceneSchedules[ruleId] = rule
-            state.editingScheduleId = null
-            rescheduleAllSceneRules()
-
-            def actionDesc = isEdit ? "Updated" : "Saved & activated"
-            state.lastScheduleSaveMessage = "${actionDesc} schedule '${rule.name}'!"
-            state.lastScheduleSaveTime = now()
-            logger("${actionDesc} scene schedule rule: ${rule.name} (${ruleId})", 'info')
-        }
+        saveCurrentSchedule()
     } else if (button.startsWith("btnDelSched_")) {
         def ruleId = button.substring("btnDelSched_".length())
         if (state.sceneSchedules && state.sceneSchedules.containsKey(ruleId)) {
