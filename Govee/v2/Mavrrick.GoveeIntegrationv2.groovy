@@ -758,7 +758,7 @@ private def saveCurrentSchedule() {
         sceneName: sceneName,
         turnOn: (settings.newSchedTurnOn != null) ? settings.newSchedTurnOn : true,
         setLevel: (settings.newSchedSetLevel != null) ? settings.newSchedSetLevel : true,
-        level: (settings.newSchedLevel != null) ? settings.newSchedLevel.toInteger() : 80,
+        level: (settings.newSchedLevel != null && settings.newSchedLevel.toString() != "") ? settings.newSchedLevel.toInteger() : (prevRule?.level != null ? prevRule.level : 80),
         enabled: (prevRule != null) ? prevRule.enabled : true,
         created: (prevRule != null) ? prevRule.created : now(),
         updated: now()
@@ -766,7 +766,6 @@ private def saveCurrentSchedule() {
 
     if (state.sceneSchedules == null) state.sceneSchedules = [:]
     state.sceneSchedules[ruleId] = rule
-    state.editingScheduleId = null
     rescheduleAllSceneRules()
 
     def actionDesc = isEdit ? "Updated" : "Saved & activated"
@@ -777,8 +776,11 @@ private def saveCurrentSchedule() {
 }
 
 def sceneSchedules() {
-    if (state.editingScheduleId && settings.newSchedDeviceDNI && settings.newSchedScene) {
-        saveCurrentSchedule()
+    if (state.editingScheduleId) {
+        if (settings.newSchedDeviceDNI && settings.newSchedScene) {
+            saveCurrentSchedule()
+        }
+        state.editingScheduleId = null
     }
     dynamicPage(name: 'sceneSchedules', title: 'Automated Scene Schedules', uninstall: false, install: false, nextPage: "mainPage") {
         section('<b>Configured Scene Schedules</b>') {
@@ -921,19 +923,19 @@ def addSceneSchedule(params = [:]) {
                         'sunrise': '🌄 Sunrise (with minute offset)',
                         'time': '⏰ Specific Time of Day'
                     ]
-                    input 'newSchedTriggerType', 'enum', title: 'Trigger Event', options: triggerTypes, defaultValue: 'sunset', required: true, submitOnChange: true
+                    input 'newSchedTriggerType', 'enum', title: 'Trigger Event', options: triggerTypes, defaultValue: (activeRule?.triggerType ?: 'sunset'), required: true, submitOnChange: true
 
                     if (settings.newSchedTriggerType == 'time') {
-                        input 'newSchedTime', 'time', title: 'Select Time of Day', required: true
+                        input 'newSchedTime', 'time', title: 'Select Time of Day', defaultValue: activeRule?.timeOfDay, required: true, submitOnChange: true
                     } else {
-                        input 'newSchedSunOffset', 'number', title: 'Offset in Minutes (-120 to +120)\nNegative = before, Positive = after', range: '-120..120', defaultValue: 0, required: true
+                        input 'newSchedSunOffset', 'number', title: 'Offset in Minutes (-120 to +120)\nNegative = before, Positive = after', range: '-120..120', defaultValue: (activeRule?.sunOffset != null ? activeRule.sunOffset : 0), required: true, submitOnChange: true
                     }
 
                     def dayOptions = [
                         'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 'Thu': 'Thursday',
                         'Fri': 'Friday', 'Sat': 'Saturday', 'Sun': 'Sunday'
                     ]
-                    input 'newSchedDays', 'enum', title: 'Days of Week to Run', options: dayOptions, multiple: true, defaultValue: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], required: true
+                    input 'newSchedDays', 'enum', title: 'Days of Week to Run', options: dayOptions, multiple: true, defaultValue: (activeRule?.daysOfWeek ?: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']), required: true, submitOnChange: true
                 }
 
                 section('<b>3. Preset Scene to Activate</b>') {
@@ -978,10 +980,10 @@ def addSceneSchedule(params = [:]) {
                 }
 
                 section('<b>4. Power & Brightness Settings</b>') {
-                    input 'newSchedTurnOn', 'bool', title: 'Ensure Light is Turned ON', defaultValue: true
-                    input 'newSchedSetLevel', 'bool', title: 'Set Brightness Level?', defaultValue: true, submitOnChange: true
+                    input 'newSchedTurnOn', 'bool', title: 'Ensure Light is Turned ON', defaultValue: (activeRule?.turnOn != null ? activeRule.turnOn : true), submitOnChange: true
+                    input 'newSchedSetLevel', 'bool', title: 'Set Brightness Level?', defaultValue: (activeRule?.setLevel != null ? activeRule.setLevel : true), submitOnChange: true
                     if (settings.newSchedSetLevel != false) {
-                        input 'newSchedLevel', 'number', title: 'Brightness Percentage (0 - 100%)', range: '0..100', defaultValue: 75
+                        input 'newSchedLevel', 'number', title: 'Brightness Percentage (0 - 100%)', range: '0..100', defaultValue: (activeRule?.level != null ? activeRule.level : 75), submitOnChange: true
                     }
                 }
 
