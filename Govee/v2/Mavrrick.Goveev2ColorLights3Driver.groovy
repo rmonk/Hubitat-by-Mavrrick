@@ -97,17 +97,21 @@ metadata {
 		}
 		section("Scene Selection") {
             def sceneOptions = [:]
-            state.scenes?.each { k, v ->
-                def sName = (v instanceof Map) ? v.name : v
-                sceneOptions[k.toString()] = "${sName} (ID: ${k})"
-            }
-            state.diyScene?.each { k, v ->
-                def sName = (v instanceof Map) ? v.name : v
-                sceneOptions[k.toString()] = "[DIY] ${sName} (ID: ${k})"
+            def leJson = device.currentValue("lightEffects")
+            if (leJson) {
+                try {
+                    def parsed = new JsonSlurper().parseText(leJson)
+                    parsed.sort { a, b -> (b.value?.toString() ?: '').toLowerCase() <=> (a.value?.toString() ?: '').toLowerCase() }.each { id, name ->
+                        sceneOptions[id.toString()] = "${name} (ID: ${id})"
+                    }
+                } catch (Exception e) {
+                    if (debugLog) {log.warn "preferences(): Error parsing lightEffects: ${e}"}
+                }
             }
             if (sceneOptions) {
-                input(name: "prefSelectedScene", type: "enum", title: "Select Scene from Dropdown", options: sceneOptions)
-                input(name: "prefActivateScene", type: "bool", title: "Activate selected scene on Save Preferences", defaultValue: false)
+                input(name: "prefSelectedScene", type: "enum", title: "Select Scene from Dropdown (applied on Save)", options: sceneOptions)
+            } else {
+                paragraph "No scenes cached. Run the 'Scene Load' command on this device, then re-open preferences."
             }
 		}
 	}
@@ -134,12 +138,11 @@ def refresh() {
 }
 
 def updated() {
-    initialize() 
-    sceneLoad()    
-    if (settings.prefActivateScene && settings.prefSelectedScene) {
-        if (debugLog) {log.debug "updated(): Activating selected scene from preferences: ${settings.prefSelectedScene}"}
+    initialize()
+    sceneLoad()
+    if (settings.prefSelectedScene) {
+        if (descLog) log.info "${device.label} Scene Selection: applying scene '${settings.prefSelectedScene}' on save"
         setEffect(settings.prefSelectedScene)
-        device.updateSetting("prefActivateScene", [value: "false", type: "bool"])
     }
 }
 
