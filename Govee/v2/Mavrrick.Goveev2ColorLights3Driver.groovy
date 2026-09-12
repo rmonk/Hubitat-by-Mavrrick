@@ -97,11 +97,16 @@ metadata {
 		}
 		section("Scene Selection") {
             def sceneOptions = [:]
-            def leJson = device.currentValue("lightEffects")
+            def leJson = null
+            try {
+                leJson = device?.currentValue("lightEffects")
+            } catch (Exception e) {
+                try { if (debugLog) log.warn "preferences(): could not read lightEffects: ${e}" } catch (Exception ignored) {}
+            }
             if (leJson) {
                 try {
                     def parsed = new JsonSlurper().parseText(leJson)
-                    parsed.sort { a, b -> (b.value?.toString() ?: '').toLowerCase() <=> (a.value?.toString() ?: '').toLowerCase() }.each { id, name ->
+                    parsed.each { id, name ->
                         sceneOptions[id.toString()] = "${name} (ID: ${id})"
                     }
                 } catch (Exception e) {
