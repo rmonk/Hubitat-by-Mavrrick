@@ -123,6 +123,8 @@ preferences
     page(name: 'sceneManualUpdate2', title: 'Update Scene data') 
     page(name: 'sceneGoveeExtract', title: 'Update Scene data')
     page(name: 'sceneController', title: 'Device Scene Controller')
+    page(name: 'sceneSchedules', title: 'Automated Scene Schedules')
+    page(name: 'addSceneSchedule', title: 'Create Automated Scene Schedule')
     page(name: 'about', title: 'About')
 }
 
@@ -202,6 +204,7 @@ def mainPage() {
         } */
         section('<b>Govee Device Scene Control</b>') {
             href 'sceneController', title: 'Device Scene Controller', description: 'Interactive drop-down interface to view and activate scenes on your Govee devices.'
+            href 'sceneSchedules', title: 'Automated Scene Schedules', description: 'Schedule preset scenes and brightness by time of day or sunrise/sunset offsets.'
         }
         section('<b>Govee LAN API Scene Management</b>') {
             href 'sceneManagement', title: 'Lan API Scene Management Menu', description: 'Click to setup extraction credential, extract scenes, and manage device association.'
@@ -723,6 +726,311 @@ def sceneController() {
     }
 }
 
+def sceneSchedules() {
+    dynamicPage(name: 'sceneSchedules', title: 'Automated Scene Schedules', uninstall: false, install: false, nextPage: "mainPage") {
+        section('<b>Configured Scene Schedules</b>') {
+            if (state.sceneSchedules && !state.sceneSchedules.isEmpty()) {
+                state.sceneSchedules.each { id, rule ->
+                    def triggerDesc = ""
+                    if (rule.triggerType == "sunset") {
+                        int off = rule.sunOffset ?: 0
+                        triggerDesc = "🌅 Sunset" + (off > 0 ? " +${off} min" : off < 0 ? " ${off} min" : "")
+                    } else if (rule.triggerType == "sunrise") {
+                        int off = rule.sunOffset ?: 0
+                        triggerDesc = "🌄 Sunrise" + (off > 0 ? " +${off} min" : off < 0 ? " ${off} min" : "")
+                    } else {
+                        triggerDesc = "⏰ " + formatTimeDisplay(rule.timeOfDay?.toString())
+                    }
+
+                    def daysDesc = (rule.daysOfWeek && rule.daysOfWeek.size() == 7) ? "Everyday" : (rule.daysOfWeek?.join(", ") ?: "Everyday")
+                    def dev = findGoveeDevice(rule.deviceDNI)
+                    def devName = dev?.displayName ?: dev?.label ?: "Unknown Device"
+                    def meta = getSceneVisualMetadata(rule.sceneName?.toString())
+                    def statusBadge = rule.enabled ? "<span style='background:#28a745; color:#fff; padding:2px 8px; border-radius:10px; font-weight:bold; font-size:10px;'>ACTIVE</span>" : "<span style='background:#6c757d; color:#fff; padding:2px 8px; border-radius:10px; font-weight:bold; font-size:10px;'>PAUSED</span>"
+                    def levelText = rule.setLevel ? "${rule.level}%" : "Current"
+                    def powerText = rule.turnOn ? "Turn On" : "Leave Power As-is"
+
+                    def cardHtml = "<div style='border:1px solid #ddd; border-radius:8px; padding:12px; margin:8px 0; background:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.05);'>"
+                    cardHtml += "<div style='display:flex; justify-content:space-between; align-items:center;'>"
+                    cardHtml += "<span style='font-size:15px; font-weight:bold;'>${rule.name} ${statusBadge}</span>"
+                    cardHtml += "<span style='font-size:12px; color:#555;'><b>Device:</b> ${devName}</span>"
+                    cardHtml += "</div>"
+                    cardHtml += "<div style='font-size:12px; margin:8px 0; color:#333;'>"
+                    cardHtml += "<b>When:</b> ${triggerDesc} (${daysDesc}) | <b>Brightness:</b> ${levelText} | <b>Action:</b> ${powerText}"
+                    cardHtml += "</div>"
+                    cardHtml += "<div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-size:12px;'>"
+                    cardHtml += "<span><b>Scene:</b> ${meta.emoji} <b>${rule.sceneName}</b> <code style='font-size:10px;'>ID: ${rule.sceneId}</code></span>"
+                    cardHtml += "<span style='font-size:10px; background:#f0f4f8; padding:2px 6px; border-radius:4px;'>${meta.categoryLabel}</span>"
+                    cardHtml += "</div>"
+                    cardHtml += "<div style='height:12px; width:100%; border-radius:4px; background:${meta.gradient}; box-shadow:inset 0 1px 2px rgba(0,0,0,0.1);'></div>"
+                    cardHtml += "</div>"
+                    paragraph cardHtml
+
+                    input "btnTestSched_${id}", "button", title: "Test Run ▶", width: 3
+                    input "btnToggleSched_${id}", "button", title: (rule.enabled ? "Pause ⏸" : "Resume ▶"), width: 3
+                    input "btnDelSched_${id}", "button", title: "Delete 🗑", width: 3
+                    paragraph "<hr style='margin:6px 0; border:0; border-top:1px solid #e0e0e0;'>"
+                }
+            } else {
+                paragraph "No automated scene schedules created yet. Click the button below to add your first rule."
+            }
+
+            if (state.lastScheduleExecMessage && (now() - (state.lastScheduleExecTime ?: 0)) < 15000) {
+                paragraph "<mark style='background:#d4edda; color:#155724; padding:4px;'>${state.lastScheduleExecMessage}</mark>"
+            }
+        }
+
+        section('<b>Add New Schedule</b>') {
+            href 'addSceneSchedule', title: '➕ Create New Scene Schedule', description: 'Configure an automation rule based on time or sunrise/sunset.'
+        }
+    }
+}
+
+def addSceneSchedule() {
+    dynamicPage(name: 'addSceneSchedule', title: 'Create Automated Scene Schedule', uninstall: false, install: false, submitOnChange: true, nextPage: "sceneSchedules") {
+        section('<b>1. Schedule Info & Target Light Device</b>') {
+            input 'newSchedName', 'string', title: 'Schedule Name', required: true, defaultValue: 'Evening Sunset Scene'
+            def devOptions = [:]
+            getAllGoveeChildDevices().each { dev ->
+                if (dev.hasCapability("LightEffects") || dev.currentValue("lightEffects")) {
+                    devOptions[dev.deviceNetworkId] = dev.displayName ?: dev.label ?: dev.name
+                }
+            }
+            if (devOptions) {
+                input 'newSchedDeviceDNI', 'enum', title: 'Select Govee Light Device', options: devOptions, required: true, submitOnChange: true
+            } else {
+                paragraph "No Govee light devices found."
+            }
+        }
+
+        if (settings.newSchedDeviceDNI) {
+            def dev = findGoveeDevice(settings.newSchedDeviceDNI)
+            if (dev) {
+                section('<b>2. When to Trigger</b>') {
+                    def triggerTypes = [
+                        'sunset': '🌅 Sunset (with minute offset)',
+                        'sunrise': '🌄 Sunrise (with minute offset)',
+                        'time': '⏰ Specific Time of Day'
+                    ]
+                    input 'newSchedTriggerType', 'enum', title: 'Trigger Event', options: triggerTypes, defaultValue: 'sunset', required: true, submitOnChange: true
+
+                    if (settings.newSchedTriggerType == 'time') {
+                        input 'newSchedTime', 'time', title: 'Select Time of Day', required: true
+                    } else {
+                        input 'newSchedSunOffset', 'number', title: 'Offset in Minutes (-120 to +120)\nNegative = before, Positive = after', range: '-120..120', defaultValue: 0, required: true
+                    }
+
+                    def dayOptions = [
+                        'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 'Thu': 'Thursday',
+                        'Fri': 'Friday', 'Sat': 'Saturday', 'Sun': 'Sunday'
+                    ]
+                    input 'newSchedDays', 'enum', title: 'Days of Week to Run', options: dayOptions, multiple: true, defaultValue: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], required: true
+                }
+
+                section('<b>3. Preset Scene to Activate</b>') {
+                    def leJson = dev.currentValue("lightEffects")
+                    def sceneOptions = [:]
+                    def parsedScenes = [:]
+                    if (leJson) {
+                        try {
+                            def jsonSlurper = new JsonSlurper()
+                            parsedScenes = jsonSlurper.parseText(leJson)
+                            parsedScenes.sort { it.value?.toString()?.toLowerCase() }.each { k, v ->
+                                def meta = getSceneVisualMetadata(v?.toString())
+                                sceneOptions[k.toString()] = "${meta.emoji} ${v} (ID: ${k})"
+                            }
+                        } catch (Exception e) {
+                            logger("addSceneSchedule error reading scenes: ${e.message}", 'warn')
+                        }
+                    }
+                    if (sceneOptions) {
+                        input 'newSchedScene', 'enum', title: 'Select Scene Preset', options: sceneOptions, required: true, submitOnChange: true
+
+                        if (settings.newSchedScene && parsedScenes.containsKey(settings.newSchedScene)) {
+                            def selName = parsedScenes[settings.newSchedScene]
+                            def selMeta = getSceneVisualMetadata(selName?.toString())
+                            def cardHtml = "<div style='background:#ffffff; border:1px solid #dcdcdc; border-radius:8px; padding:10px; margin:8px 0; box-shadow:0 1px 3px rgba(0,0,0,0.06);'>"
+                            cardHtml += "<div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;'>"
+                            cardHtml += "<span style='font-size:14px; font-weight:bold;'>${selMeta.emoji} ${selName} <span style='font-size:11px; color:#777; font-weight:normal;'>(ID: ${settings.newSchedScene})</span></span>"
+                            cardHtml += "<span style='font-size:10px; background:#e8f0fe; color:#1a73e8; border-radius:10px; padding:2px 8px; font-weight:600;'>${selMeta.mood}</span>"
+                            cardHtml += "</div>"
+                            cardHtml += "<div style='height:20px; width:100%; border-radius:4px; background:${selMeta.gradient}; margin-bottom:6px; box-shadow:inset 0 1px 2px rgba(0,0,0,0.15);'></div>"
+                            cardHtml += "<div style='display:flex; align-items:center; gap:4px; flex-wrap:wrap;'>"
+                            selMeta.colors.each { c ->
+                                cardHtml += "<span style='display:inline-flex; align-items:center; background:#f9f9f9; border:1px solid #ccc; border-radius:4px; padding:1px 5px; font-size:10px; font-family:monospace;'>"
+                                cardHtml += "<span style='display:inline-block; width:9px; height:9px; border-radius:50%; background:${c}; margin-right:3px;'></span>${c.toUpperCase()}</span>"
+                            }
+                            cardHtml += "</div></div>"
+                            paragraph cardHtml
+                        }
+                    } else {
+                        paragraph "No scenes cached for this device. Please run 'Scene Load' on device details page."
+                    }
+                }
+
+                section('<b>4. Power & Brightness Settings</b>') {
+                    input 'newSchedTurnOn', 'bool', title: 'Ensure Light is Turned ON', defaultValue: true
+                    input 'newSchedSetLevel', 'bool', title: 'Set Brightness Level?', defaultValue: true, submitOnChange: true
+                    if (settings.newSchedSetLevel != false) {
+                        input 'newSchedLevel', 'number', title: 'Brightness Percentage (0 - 100%)', range: '0..100', defaultValue: 75
+                    }
+                }
+
+                section('<b>5. Save Schedule Rule</b>') {
+                    input 'btnSaveNewSchedule', 'button', title: 'Save & Activate Schedule Rule'
+                    if (state.lastScheduleSaveMessage && (now() - (state.lastScheduleSaveTime ?: 0)) < 15000) {
+                        paragraph "<mark style='background:#d4edda; color:#155724; padding:4px;'>${state.lastScheduleSaveMessage}</mark>"
+                    }
+                }
+            }
+        }
+    }
+}
+
+private String formatTimeDisplay(String timeStr) {
+    if (!timeStr) return "N/A"
+    try {
+        if (timeStr.contains("T")) {
+            def sdfIn = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ")
+            def d = sdfIn.parse(timeStr)
+            def sdfOut = new java.text.SimpleDateFormat("hh:mm a")
+            return sdfOut.format(d)
+        }
+        return timeStr
+    } catch (Exception e) {
+        return timeStr
+    }
+}
+
+def dailyScheduleRecalc() {
+    logger("dailyScheduleRecalc(): Refreshing daily sunrise/sunset schedules", 'info')
+    rescheduleAllSceneRules()
+}
+
+def rescheduleAllSceneRules() {
+    unschedule("dailyScheduleRecalc")
+    unschedule("executeScheduledRuleJob")
+
+    if (!state.sceneSchedules || state.sceneSchedules.isEmpty()) return
+
+    // Recalibrate every day at 00:01 AM
+    schedule("0 1 0 * * ?", "dailyScheduleRecalc")
+
+    state.sceneSchedules.each { id, rule ->
+        if (rule.enabled) {
+            scheduleSingleRule(rule)
+        }
+    }
+}
+
+def scheduleSingleRule(Map rule) {
+    if (!rule || !rule.enabled) return
+    Date nextRun = calculateNextRun(rule)
+    if (nextRun) {
+        logger("scheduleSingleRule(): Scheduling '${rule.name}' for ${nextRun}", 'info')
+        runOnce(nextRun, "executeScheduledRuleJob", [overwrite: false, data: [ruleId: rule.id]])
+    }
+}
+
+def executeScheduledRuleJob(Map data) {
+    if (!data || !data.ruleId || !state.sceneSchedules) return
+    def rule = state.sceneSchedules[data.ruleId]
+    if (!rule || !rule.enabled) return
+
+    def cal = Calendar.getInstance()
+    String todayDay = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][cal.get(Calendar.DAY_OF_WEEK) - 1]
+    if (rule.daysOfWeek && !rule.daysOfWeek.contains(todayDay)) {
+        logger("executeScheduledRuleJob(): Skipping '${rule.name}' - ${todayDay} not in allowed days (${rule.daysOfWeek})", 'info')
+    } else {
+        executeSingleRule(rule)
+    }
+
+    // Schedule next occurrence
+    scheduleSingleRule(rule)
+}
+
+def executeSingleRule(Map rule) {
+    if (!rule || !rule.deviceDNI) return
+    def dev = findGoveeDevice(rule.deviceDNI)
+    if (!dev) {
+        logger("executeSingleRule(): Device ${rule.deviceDNI} not found", 'warn')
+        return
+    }
+
+    logger("executeSingleRule(): Executing rule '${rule.name}' on ${dev.displayName}", 'info')
+    if (rule.turnOn) {
+        dev.on()
+    }
+    if (rule.setLevel && rule.level != null) {
+        dev.setLevel(rule.level.toInteger())
+    }
+    if (rule.sceneId) {
+        dev.setEffect(rule.sceneId)
+    }
+
+    state.lastScheduleExecMessage = "Executed '${rule.name}' on ${dev.displayName}"
+    state.lastScheduleExecTime = now()
+}
+
+private Date calculateNextRun(Map rule) {
+    if (!rule) return null
+    Date now = new Date()
+    Calendar cal = Calendar.getInstance()
+    cal.setTime(now)
+
+    Date target = null
+    if (rule.triggerType == "time" && rule.timeOfDay) {
+        def tCal = Calendar.getInstance()
+        try {
+            if (rule.timeOfDay.contains("T")) {
+                def sdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ")
+                tCal.setTime(sdf.parse(rule.timeOfDay))
+            } else {
+                def parts = rule.timeOfDay.split(":")
+                tCal.set(Calendar.HOUR_OF_DAY, parts[0].toInteger())
+                tCal.set(Calendar.MINUTE, parts[1].toInteger())
+            }
+            cal.set(Calendar.HOUR_OF_DAY, tCal.get(Calendar.HOUR_OF_DAY))
+            cal.set(Calendar.MINUTE, tCal.get(Calendar.MINUTE))
+            cal.set(Calendar.SECOND, 0)
+            cal.set(Calendar.MILLISECOND, 0)
+            if (cal.getTime().before(now)) {
+                cal.add(Calendar.DAY_OF_YEAR, 1)
+            }
+            target = cal.getTime()
+        } catch (Exception e) {
+            logger("calculateNextRun time parse error: ${e}", 'warn')
+        }
+    } else if (rule.triggerType == "sunset" || rule.triggerType == "sunrise") {
+        int offset = rule.sunOffset ?: 0
+        def sun = null
+        try {
+            sun = getSunriseAndSunset(sunriseOffset: offset, sunsetOffset: offset)
+        } catch (Exception e) {
+            logger("getSunriseAndSunset error: ${e}", 'warn')
+        }
+
+        Date eventTime = null
+        if (sun) {
+            eventTime = (rule.triggerType == "sunset") ? sun.sunset : sun.sunrise
+        }
+        if (!eventTime) {
+            Calendar c = Calendar.getInstance()
+            c.set(Calendar.HOUR_OF_DAY, rule.triggerType == "sunset" ? 18 : 6)
+            c.set(Calendar.MINUTE, 0)
+            c.set(Calendar.SECOND, 0)
+            c.add(Calendar.MINUTE, offset)
+            eventTime = c.getTime()
+        }
+
+        if (eventTime.before(now)) {
+            eventTime = new Date(eventTime.time + 86400000)
+        }
+        target = eventTime
+    }
+    return target
+}
+
 def sceneManagement() {
     app.clearSetting("devsku")
     app.clearSetting("sceneName")
@@ -1062,6 +1370,7 @@ def installed() {
         retrieveGoveeAPIData()
     }
     state.loggingLevelIDE = (settings.configLoggingLevelIDE) ? settings.configLoggingLevelIDE.toInteger() : 3
+    rescheduleAllSceneRules()
 }
 
 def updated() {
@@ -1091,6 +1400,7 @@ def updated() {
     if (!state.goveeAppAPI && settings.APIKey) {
         retrieveGoveeAPIData()
     }
+    rescheduleAllSceneRules()
 }
 
 def uninstalled() {
@@ -1903,6 +2213,67 @@ private def appButtonHandler(button) {
                 }
                 state.lastActivatedTime = now()
             }
+        }
+    } else if (button == "btnSaveNewSchedule") {
+        if (settings.newSchedDeviceDNI && settings.newSchedScene) {
+            def dev = findGoveeDevice(settings.newSchedDeviceDNI)
+            def sceneName = settings.newSchedScene
+            if (dev) {
+                def leJson = dev.currentValue("lightEffects")
+                if (leJson) {
+                    try {
+                        def jsonSlurper = new JsonSlurper()
+                        def parsed = jsonSlurper.parseText(leJson)
+                        sceneName = parsed[settings.newSchedScene] ?: settings.newSchedScene
+                    } catch (Exception e) {}
+                }
+            }
+
+            def ruleId = "sched_" + now()
+            def rule = [
+                id: ruleId,
+                name: settings.newSchedName ?: "Scheduled Scene",
+                deviceDNI: settings.newSchedDeviceDNI,
+                triggerType: settings.newSchedTriggerType ?: "sunset",
+                sunOffset: (settings.newSchedSunOffset != null) ? settings.newSchedSunOffset.toInteger() : 0,
+                timeOfDay: settings.newSchedTime,
+                daysOfWeek: settings.newSchedDays ?: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+                sceneId: settings.newSchedScene,
+                sceneName: sceneName,
+                turnOn: (settings.newSchedTurnOn != null) ? settings.newSchedTurnOn : true,
+                setLevel: (settings.newSchedSetLevel != null) ? settings.newSchedSetLevel : true,
+                level: (settings.newSchedLevel != null) ? settings.newSchedLevel.toInteger() : 80,
+                enabled: true,
+                created: now()
+            ]
+
+            if (state.sceneSchedules == null) state.sceneSchedules = [:]
+            state.sceneSchedules[ruleId] = rule
+            rescheduleAllSceneRules()
+
+            state.lastScheduleSaveMessage = "Saved & activated schedule '${rule.name}'!"
+            state.lastScheduleSaveTime = now()
+            logger("Saved new scene schedule rule: ${rule.name} (${ruleId})", 'info')
+        }
+    } else if (button.startsWith("btnDelSched_")) {
+        def ruleId = button.substring("btnDelSched_".length())
+        if (state.sceneSchedules && state.sceneSchedules.containsKey(ruleId)) {
+            def ruleName = state.sceneSchedules[ruleId]?.name
+            state.sceneSchedules.remove(ruleId)
+            rescheduleAllSceneRules()
+            logger("Deleted scene schedule rule '${ruleName}' (${ruleId})", 'info')
+        }
+    } else if (button.startsWith("btnToggleSched_")) {
+        def ruleId = button.substring("btnToggleSched_".length())
+        if (state.sceneSchedules && state.sceneSchedules.containsKey(ruleId)) {
+            state.sceneSchedules[ruleId].enabled = !state.sceneSchedules[ruleId].enabled
+            rescheduleAllSceneRules()
+            logger("Toggled scene schedule rule '${state.sceneSchedules[ruleId]?.name}' -> enabled: ${state.sceneSchedules[ruleId].enabled}", 'info')
+        }
+    } else if (button.startsWith("btnTestSched_")) {
+        def ruleId = button.substring("btnTestSched_".length())
+        if (state.sceneSchedules && state.sceneSchedules.containsKey(ruleId)) {
+            executeSingleRule(state.sceneSchedules[ruleId])
         }
     }
 }
