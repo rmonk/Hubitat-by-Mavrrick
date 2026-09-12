@@ -766,6 +766,7 @@ def sceneSchedules() {
                     cardHtml += "</div>"
                     paragraph cardHtml
 
+                    href(name: "btnEditSched_${id}", page: "addSceneSchedule", params: [ruleId: id], title: "Edit Rule ✏️", description: "", width: 3)
                     input "btnTestSched_${id}", "button", title: "Test Run ▶", width: 3
                     input "btnToggleSched_${id}", "button", title: (rule.enabled ? "Pause ⏸" : "Resume ▶"), width: 3
                     input "btnDelSched_${id}", "button", title: "Delete 🗑", width: 3
@@ -781,15 +782,48 @@ def sceneSchedules() {
         }
 
         section('<b>Add New Schedule</b>') {
-            href 'addSceneSchedule', title: '➕ Create New Scene Schedule', description: 'Configure an automation rule based on time or sunrise/sunset.'
+            href(name: 'btnCreateNewSched', page: 'addSceneSchedule', params: [ruleId: 'new'], title: '➕ Create New Scene Schedule', description: 'Configure an automation rule based on time or sunrise/sunset.')
         }
     }
 }
 
-def addSceneSchedule() {
-    dynamicPage(name: 'addSceneSchedule', title: 'Create Automated Scene Schedule', uninstall: false, install: false, submitOnChange: true, nextPage: "sceneSchedules") {
+def addSceneSchedule(params = [:]) {
+    if (params?.ruleId) {
+        if (params.ruleId == "new") {
+            state.editingScheduleId = null
+            ["newSchedName", "newSchedDeviceDNI", "newSchedTriggerType", "newSchedSunOffset", "newSchedTime", "newSchedDays", "newSchedScene", "newSchedTurnOn", "newSchedSetLevel", "newSchedLevel"].each {
+                app.clearSetting(it)
+            }
+        } else {
+            state.editingScheduleId = params.ruleId
+            def rule = state.sceneSchedules?.get(params.ruleId)
+            if (rule) {
+                app.updateSetting("newSchedName", [value: rule.name, type: "string"])
+                app.updateSetting("newSchedDeviceDNI", [value: rule.deviceDNI, type: "enum"])
+                app.updateSetting("newSchedTriggerType", [value: rule.triggerType, type: "enum"])
+                app.updateSetting("newSchedSunOffset", [value: rule.sunOffset, type: "number"])
+                app.updateSetting("newSchedTime", [value: rule.timeOfDay, type: "time"])
+                app.updateSetting("newSchedDays", [value: rule.daysOfWeek, type: "enum"])
+                app.updateSetting("newSchedScene", [value: rule.sceneId, type: "enum"])
+                app.updateSetting("newSchedTurnOn", [value: rule.turnOn, type: "bool"])
+                app.updateSetting("newSchedSetLevel", [value: rule.setLevel, type: "bool"])
+                app.updateSetting("newSchedLevel", [value: rule.level, type: "number"])
+            }
+        }
+    }
+
+    def isEditing = (state.editingScheduleId && state.sceneSchedules?.containsKey(state.editingScheduleId))
+    def activeRule = isEditing ? state.sceneSchedules[state.editingScheduleId] : null
+    def pageTitle = isEditing ? "Edit Scene Schedule: ${activeRule?.name}" : "Create Automated Scene Schedule"
+
+    dynamicPage(name: 'addSceneSchedule', title: pageTitle, uninstall: false, install: false, submitOnChange: true, nextPage: "sceneSchedules") {
+        if (isEditing) {
+            section {
+                paragraph "<mark style='background:#e8f0fe; color:#1a73e8; padding:6px 12px; border-radius:4px; font-weight:bold;'>Editing Schedule Rule: ${activeRule.name}</mark>"
+            }
+        }
         section('<b>1. Schedule Info & Target Light Device</b>') {
-            input 'newSchedName', 'string', title: 'Schedule Name', required: true, defaultValue: 'Evening Sunset Scene'
+            input 'newSchedName', 'string', title: 'Schedule Name', required: true, defaultValue: (activeRule?.name ?: 'Evening Sunset Scene')
             def devOptions = [:]
             getAllGoveeChildDevices().each { dev ->
                 if (dev.hasCapability("LightEffects") || dev.currentValue("lightEffects")) {
@@ -877,7 +911,8 @@ def addSceneSchedule() {
                 }
 
                 section('<b>5. Save Schedule Rule</b>') {
-                    input 'btnSaveNewSchedule', 'button', title: 'Save & Activate Schedule Rule'
+                    def saveBtnTitle = isEditing ? 'Update & Save Schedule Rule' : 'Save & Activate Schedule Rule'
+                    input 'btnSaveNewSchedule', 'button', title: saveBtnTitle
                     if (state.lastScheduleSaveMessage && (now() - (state.lastScheduleSaveTime ?: 0)) < 15000) {
                         paragraph "<mark style='background:#d4edda; color:#155724; padding:4px;'>${state.lastScheduleSaveMessage}</mark>"
                     }
@@ -2229,7 +2264,10 @@ private def appButtonHandler(button) {
                 }
             }
 
-            def ruleId = "sched_" + now()
+            def isEdit = (state.editingScheduleId && state.sceneSchedules?.containsKey(state.editingScheduleId))
+            def ruleId = isEdit ? state.editingScheduleId : ("sched_" + now())
+            def prevRule = isEdit ? state.sceneSchedules[ruleId] : null
+
             def rule = [
                 id: ruleId,
                 name: settings.newSchedName ?: "Scheduled Scene",
@@ -2243,17 +2281,20 @@ private def appButtonHandler(button) {
                 turnOn: (settings.newSchedTurnOn != null) ? settings.newSchedTurnOn : true,
                 setLevel: (settings.newSchedSetLevel != null) ? settings.newSchedSetLevel : true,
                 level: (settings.newSchedLevel != null) ? settings.newSchedLevel.toInteger() : 80,
-                enabled: true,
-                created: now()
+                enabled: (prevRule != null) ? prevRule.enabled : true,
+                created: (prevRule != null) ? prevRule.created : now(),
+                updated: now()
             ]
 
             if (state.sceneSchedules == null) state.sceneSchedules = [:]
             state.sceneSchedules[ruleId] = rule
+            state.editingScheduleId = null
             rescheduleAllSceneRules()
 
-            state.lastScheduleSaveMessage = "Saved & activated schedule '${rule.name}'!"
+            def actionDesc = isEdit ? "Updated" : "Saved & activated"
+            state.lastScheduleSaveMessage = "${actionDesc} schedule '${rule.name}'!"
             state.lastScheduleSaveTime = now()
-            logger("Saved new scene schedule rule: ${rule.name} (${ruleId})", 'info')
+            logger("${actionDesc} scene schedule rule: ${rule.name} (${ruleId})", 'info')
         }
     } else if (button.startsWith("btnDelSched_")) {
         def ruleId = button.substring("btnDelSched_".length())
