@@ -40,6 +40,13 @@ metadata {
         attribute "cloudAPI", "string"
         attribute "effectNum", "integer" 
         attribute "goveeBrightness", "integer"
+        attribute "sceneCatalog", "string"
+        command "setEffect", [
+            [name: "effect", type: "STRING", description: "Scene Number or Name (e.g. 10745 or Forest)"]
+           ]
+        command "setEffectByName", [
+            [name: "sceneName", type: "STRING", description: "Scene or DIY Name to activate (e.g. Forest, Sunset)"]
+           ]
         command "activateDIY", [
             [name: "diyNumber", type: "NUMBER", description: "DIY Number to activate"]
            ]
@@ -80,7 +87,28 @@ metadata {
             input(name: "debugLog", type: "bool", title: "Debug Logging", defaultValue: false)
             input("descLog", "bool", title: "Enable descriptionText logging", required: true, defaultValue: true) 
 		}
-		
+		section("Scene Selection") {
+            def sceneOptions = [:]
+            def leJson = null
+            try {
+                leJson = device?.currentValue("lightEffects")
+            } catch (Exception e) {
+                try { if (debugLog) log.warn "preferences(): could not read lightEffects: ${e}" } catch (Exception ignored) {}
+            }
+            if (leJson) {
+                try {
+                    def parsed = new JsonSlurper().parseText(leJson)
+                    parsed.each { id, name ->
+                        sceneOptions[id.toString()] = "${name} (ID: ${id})"
+                    }
+                } catch (Exception e) {
+                    if (debugLog) {log.warn "preferences(): Error parsing lightEffects: ${e}"}
+                }
+            }
+            if (sceneOptions) {
+                input(name: "prefSelectedScene", type: "enum", title: "Select Scene from Dropdown (applied on Save)", options: sceneOptions)
+            }
+		}
 	}
 }
 
@@ -107,6 +135,20 @@ def refresh() {
 def updated() {
     initialize()
     sceneLoad()
+    if (settings.prefSelectedScene) {
+        if (descLog) log.info "${device.label} Scene Selection: applying scene '${settings.prefSelectedScene}' on save"
+        // Delay to let retrieveScenes2()/retrieveDIYScenes() HTTP callbacks populate state.scenes
+        runIn(3, 'applySelectedPrefScene', [overwrite: true, data: [scene: settings.prefSelectedScene]])
+    }
+}
+
+def applySelectedPrefScene(data = null) {
+    def scene = (data instanceof Map && data.scene) ? data.scene : settings.prefSelectedScene
+    if (scene) {
+        if (descLog) log.info "${device.label} Scene Selection: activating scene '${scene}'"
+        setEffect(scene)
+        if (descLog) log.info "${device.label} Scene Selection: scene '${scene}' command sent"
+    }
 }
 
 def initialize(){
@@ -256,6 +298,11 @@ def  setEffect(effectNo) {
     } else { 
         cloudSetEffect (effectNo)
     }
+}
+
+def setEffectByName(sceneName) {
+    if (debugLog) {log.debug "setEffectByName(): Setting effect by name '${sceneName}'"}
+    setEffect(sceneName)
 }
 
 def setNextEffect() {
